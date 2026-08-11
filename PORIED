@@ -774,25 +774,4 @@ function PoriedUI:CreateWindow(config)
     return WindowObj
 end
 
--- ================================================================= --
--- [[ ПРИМЕР ИСПОЛЬЗОВАНИЯ ]] --
--- ================================================================= --
-
-local Window = PoriedUI:CreateWindow({
-    Name = "UniversalMenu"
-})
-
-local CombatTab = Window:CreateTab("Combat")
-local MovementTab = Window:CreateTab("Movement")
-
-CombatTab:CreateSection("Aimbot Settings")
-CombatTab:CreateToggle({Name = "Enable Aimbot", Default = false, Callback = function(s) print("Aim:", s) end})
-CombatTab:CreateToggle({Name = "Wall Check", Default = false, Callback = function(s) print("WC:", s) end})
-
-MovementTab:CreateSection("Movement Settings")
-MovementTab:CreateToggle({Name = "Bhop Hack", Default = false, Callback = function(s) print("Bhop:", s) end})
-MovementTab:CreateToggle({Name = "Speed Hack", Default = false, Callback = function(s) print("Speed:", s) end})
-
-Window:CreateBindsTab()
-
 return PoriedUI
