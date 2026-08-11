@@ -1,4 +1,4 @@
--- [[ PORIED UI FRAMEWORK V4 - MOBILE TOUCH FIXED ]] --
+-- [[ PORIED UI FRAMEWORK V5 - OVERLAY & CUSTOM TAB INTEGRATED ]] --
 -- Style: Soft Dark Glass | Accent: Emerald Green | Touch Native
 
 local PoriedUI = {}
@@ -6,6 +6,8 @@ PoriedUI.__index = PoriedUI
 
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local StatsService = game:GetService("Stats")
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local LocalPlayer = Players.LocalPlayer
@@ -87,6 +89,7 @@ function PoriedUI:CreateWindow(config)
     pcall(function() ScreenGui.Parent = CoreGui end)
     if not ScreenGui.Parent then ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
 
+    -- Главное окно
     local MainFrame = Instance.new("Frame")
     MainFrame.Name = "MainFrame"
     MainFrame.Size = UDim2.new(0, 520, 0, 340)
@@ -103,6 +106,7 @@ function PoriedUI:CreateWindow(config)
     MainStroke.Transparency = Theme.GlassStrokeTransparency
     MainStroke.Thickness = 1.2
 
+    -- Шапка
     local TopBar = Instance.new("Frame")
     TopBar.Name = "TopBar"
     TopBar.Size = UDim2.new(1, 0, 0, 45)
@@ -164,6 +168,7 @@ function PoriedUI:CreateWindow(config)
     ContentContainer.ClipsDescendants = true
     ContentContainer.Parent = MainFrame
 
+    -- Кнопка PORIED
     local PoriedButton = Instance.new("Frame")
     PoriedButton.Name = "PoriedFloatButton"
     PoriedButton.Size = UDim2.new(0, 85, 0, 34)
@@ -200,6 +205,83 @@ function PoriedUI:CreateWindow(config)
         end
     end)
 
+    -- // КАПСУЛЬНЫЙ ОВЕРЛЕЙ (FPS | PING | NAME) // --
+    local OverlayFrame = Instance.new("Frame")
+    OverlayFrame.Name = "PoriedOverlay"
+    OverlayFrame.Size = UDim2.new(0, 200, 0, 30)
+    OverlayFrame.Position = UDim2.new(0, 15, 0, 15)
+    OverlayFrame.BackgroundColor3 = Theme.MainBackground
+    OverlayFrame.BackgroundTransparency = 0.2
+    OverlayFrame.Parent = ScreenGui
+
+    Instance.new("UICorner", OverlayFrame).CornerRadius = UDim.new(1, 0)
+
+    local OverlayStroke = Instance.new("UIStroke", OverlayFrame)
+    OverlayStroke.Color = Theme.Accent
+    OverlayStroke.Thickness = 1.5
+
+    local OverlayLabel = Instance.new("TextLabel")
+    OverlayLabel.Size = UDim2.new(1, 0, 1, 0)
+    OverlayLabel.BackgroundTransparency = 1
+    OverlayLabel.TextColor3 = Theme.TextWhite
+    OverlayLabel.TextSize = 11
+    OverlayLabel.Font = Enum.Font.GothamBold
+    OverlayLabel.TextXAlignment = Enum.TextXAlignment.Center
+    OverlayLabel.Parent = OverlayFrame
+
+    MakeDraggable(OverlayFrame)
+
+    local OverlaySettings = {
+        Enabled = true,
+        ShowFPS = true,
+        ShowPing = true,
+        ShowName = true
+    }
+
+    -- Обновление статистики в реальном времени
+    local fps = 60
+    local frameCount = 0
+    local lastFpsUpdate = tick()
+
+    RunService.RenderStepped:Connect(function()
+        frameCount = frameCount + 1
+        local now = tick()
+        if now - lastFpsUpdate >= 0.5 then
+            fps = math.floor(frameCount / (now - lastFpsUpdate))
+            frameCount = 0
+            lastFpsUpdate = now
+        end
+
+        if not OverlaySettings.Enabled then
+            OverlayFrame.Visible = false
+            return
+        end
+
+        local parts = {}
+        if OverlaySettings.ShowFPS then
+            table.insert(parts, fps .. " FPS")
+        end
+        if OverlaySettings.ShowPing then
+            local ping = 0
+            pcall(function()
+                ping = math.floor(StatsService.Network.ServerStatsItem["Data Ping"]:GetValue())
+            end)
+            table.insert(parts, ping .. "ms")
+        end
+        if OverlaySettings.ShowName then
+            table.insert(parts, LocalPlayer.DisplayName or LocalPlayer.Name)
+        end
+
+        if #parts > 0 then
+            OverlayFrame.Visible = true
+            OverlayLabel.Text = table.concat(parts, "  |  ")
+            local textWidth = OverlayLabel.TextBounds.X + 26
+            OverlayFrame.Size = UDim2.new(0, math.max(100, textWidth), 0, 30)
+        else
+            OverlayFrame.Visible = false
+        end
+    end)
+
     local WindowObj = {
         ScreenGui = ScreenGui,
         MainFrame = MainFrame,
@@ -209,7 +291,8 @@ function PoriedUI:CreateWindow(config)
         RegisteredToggleNames = {},
         ContentContainer = ContentContainer,
         TabBarScroller = TabBarScroller,
-        TabListLayout = TabListLayout
+        TabListLayout = TabListLayout,
+        OverlaySettings = OverlaySettings
     }
 
     function WindowObj:CreateTab(tabName)
@@ -662,6 +745,45 @@ function PoriedUI:CreateWindow(config)
         return TabObj
     end
 
+    -- // ВСТРОЕННАЯ ВКЛАДКА "CUSTOM" (НАСТРОЙКА ОВЕРЛЕЯ) // --
+    function WindowObj:CreateCustomTab()
+        local CustomTab = WindowObj:CreateTab("Custom")
+        CustomTab:CreateSection("Overlay Settings")
+
+        CustomTab:CreateToggle({
+            Name = "Enable Overlay Widget",
+            Default = true,
+            Callback = function(v)
+                OverlaySettings.Enabled = v
+            end
+        })
+
+        CustomTab:CreateToggle({
+            Name = "Show FPS",
+            Default = true,
+            Callback = function(v)
+                OverlaySettings.ShowFPS = v
+            end
+        })
+
+        CustomTab:CreateToggle({
+            Name = "Show Ping",
+            Default = true,
+            Callback = function(v)
+                OverlaySettings.ShowPing = v
+            end
+        })
+
+        CustomTab:CreateToggle({
+            Name = "Show Player Name",
+            Default = true,
+            Callback = function(v)
+                OverlaySettings.ShowName = v
+            end
+        })
+    end
+
+    -- // ВСТРОЕННАЯ ВКЛАДКА "BINDS" // --
     function WindowObj:CreateBindsTab()
         local BindTab = WindowObj:CreateTab("Binds")
         BindTab:CreateSection("Quick Action Binds")
@@ -743,6 +865,10 @@ function PoriedUI:CreateWindow(config)
             end
         })
     end
+
+    -- Автоматическое вызовы встроенных вкладок
+    WindowObj:CreateCustomTab()
+    WindowObj:CreateBindsTab()
 
     return WindowObj
 end
