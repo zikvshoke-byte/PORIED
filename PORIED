@@ -1,23 +1,21 @@
--- [[ PORIED UI FRAMEWORK V3 - SMART TOUCH DRAGGABLE & BIND SYSTEM ]] --
--- Style: Soft Dark Glass | Accent: Emerald Green | Responsive Touch UI
+-- [[ PORIED UI FRAMEWORK V4 - MOBILE TOUCH FIXED ]] --
+-- Style: Soft Dark Glass | Accent: Emerald Green | Touch Native
 
 local PoriedUI = {}
 PoriedUI.__index = PoriedUI
 
--- Сервисы
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local LocalPlayer = Players.LocalPlayer
 
--- Настройки стиля (Soft Dark Glass)
 local Theme = {
     MainBackground = Color3.fromRGB(18, 20, 25),
     MainTransparency = 0.22,
     ElementBackground = Color3.fromRGB(28, 32, 40),
     ElementTransparency = 0.25,
-    Accent = Color3.fromRGB(0, 230, 118), -- Изумрудно-зеленый
+    Accent = Color3.fromRGB(0, 230, 118),
     AccentDark = Color3.fromRGB(0, 180, 90),
     TextWhite = Color3.fromRGB(255, 255, 255),
     TextDark = Color3.fromRGB(150, 155, 165),
@@ -26,7 +24,6 @@ local Theme = {
     CornerRadius = UDim.new(0, 12)
 }
 
--- Вспомогательная функция анимации
 local function Tween(instance, duration, properties)
     local info = TweenInfo.new(duration, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
     local tween = TweenService:Create(instance, info, properties)
@@ -34,9 +31,11 @@ local function Tween(instance, duration, properties)
     return tween
 end
 
--- // УМНЫЙ АЛГОРИТМ ПЕРЕТАСКИВАНИЯ И КЛИКА ДЛЯ МОБИЛЬНЫХ // --
 local function MakeDraggableAndClickable(gui, handle, onClick)
     handle = handle or gui
+    handle.Active = true
+    gui.Active = true
+    
     local dragging = false
     local dragStart, startPos
     local moved = false
@@ -53,8 +52,7 @@ local function MakeDraggableAndClickable(gui, handle, onClick)
     handle.InputChanged:Connect(function(input)
         if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             local delta = input.Position - dragStart
-            -- Если палец сдвинулся больше чем на 5 пикселей — считаем это перетаскиванием, а не кликом
-            if delta.Magnitude > 5 then
+            if delta.Magnitude > 6 then
                 moved = true
                 Tween(gui, 0.05, {Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)})
             end
@@ -65,7 +63,6 @@ local function MakeDraggableAndClickable(gui, handle, onClick)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             if dragging then
                 dragging = false
-                -- Если палец не двигался — это был обычный клик!
                 if not moved and onClick then
                     onClick()
                 end
@@ -74,12 +71,10 @@ local function MakeDraggableAndClickable(gui, handle, onClick)
     end)
 end
 
--- Обычное перетаскивание окна (без клика)
 local function MakeDraggable(gui, handle)
     MakeDraggableAndClickable(gui, handle, nil)
 end
 
--- // СОЗДАНИЕ ОКНА // --
 function PoriedUI:CreateWindow(config)
     config = config or {}
     local TitleText = config.Name or "Poried Universal"
@@ -92,7 +87,6 @@ function PoriedUI:CreateWindow(config)
     pcall(function() ScreenGui.Parent = CoreGui end)
     if not ScreenGui.Parent then ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
 
-    -- Главное окно
     local MainFrame = Instance.new("Frame")
     MainFrame.Name = "MainFrame"
     MainFrame.Size = UDim2.new(0, 520, 0, 340)
@@ -102,15 +96,13 @@ function PoriedUI:CreateWindow(config)
     MainFrame.ClipsDescendants = true
     MainFrame.Parent = ScreenGui
 
-    local MainCorner = Instance.new("UICorner", MainFrame)
-    MainCorner.CornerRadius = Theme.CornerRadius
+    Instance.new("UICorner", MainFrame).CornerRadius = Theme.CornerRadius
 
     local MainStroke = Instance.new("UIStroke", MainFrame)
     MainStroke.Color = Theme.GlassStroke
     MainStroke.Transparency = Theme.GlassStrokeTransparency
     MainStroke.Thickness = 1.2
 
-    -- Шапка (TopBar)
     local TopBar = Instance.new("Frame")
     TopBar.Name = "TopBar"
     TopBar.Size = UDim2.new(1, 0, 0, 45)
@@ -119,7 +111,6 @@ function PoriedUI:CreateWindow(config)
 
     MakeDraggable(MainFrame, TopBar)
 
-    -- Логотип / Название
     local Title = Instance.new("TextLabel")
     Title.Size = UDim2.new(0, 150, 1, 0)
     Title.Position = UDim2.new(0, 15, 0, 0)
@@ -131,7 +122,6 @@ function PoriedUI:CreateWindow(config)
     Title.BackgroundTransparency = 1
     Title.Parent = TopBar
 
-    -- Горизонтальные Табы
     local TabBarScroller = Instance.new("ScrollingFrame")
     TabBarScroller.Name = "TabBarScroller"
     TabBarScroller.Size = UDim2.new(1, -210, 1, 0)
@@ -148,7 +138,6 @@ function PoriedUI:CreateWindow(config)
     TabListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
     TabListLayout.Parent = TabBarScroller
 
-    -- Кнопка закрытия (X)
     local CloseBtn = Instance.new("TextButton")
     CloseBtn.Size = UDim2.new(0, 26, 0, 26)
     CloseBtn.Position = UDim2.new(1, -34, 0.5, -13)
@@ -162,12 +151,11 @@ function PoriedUI:CreateWindow(config)
 
     Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(1, 0)
     
-    CloseBtn.MouseButton1Click:Connect(function()
+    CloseBtn.Activated:Connect(function()
         Tween(MainFrame, 0.2, {Size = UDim2.new(0, 0, 0, 0)})
         task.delay(0.2, function() ScreenGui:Destroy() end)
     end)
 
-    -- Контейнер для содержимого
     local ContentContainer = Instance.new("Frame")
     ContentContainer.Name = "ContentContainer"
     ContentContainer.Size = UDim2.new(1, -20, 1, -55)
@@ -176,7 +164,6 @@ function PoriedUI:CreateWindow(config)
     ContentContainer.ClipsDescendants = true
     ContentContainer.Parent = MainFrame
 
-    -- // ИСПРАВЛЕННАЯ ПЛАВАЮЩАЯ КНОПКА "PORIED" (ПЕРЕТАСКИВАНИЕ + КЛИК) // --
     local PoriedButton = Instance.new("Frame")
     PoriedButton.Name = "PoriedFloatButton"
     PoriedButton.Size = UDim2.new(0, 85, 0, 34)
@@ -202,7 +189,6 @@ function PoriedUI:CreateWindow(config)
 
     local windowVisible = true
 
-    -- Умный драг и клик для Poried кнопки
     MakeDraggableAndClickable(PoriedButton, PText, function()
         windowVisible = not windowVisible
         if windowVisible then
@@ -226,7 +212,6 @@ function PoriedUI:CreateWindow(config)
         TabListLayout = TabListLayout
     }
 
-    -- // СОЗДАНИЕ ВКЛАДКИ // --
     function WindowObj:CreateTab(tabName)
         local TabButton = Instance.new("TextButton")
         TabButton.Size = UDim2.new(0, 75, 0, 28)
@@ -284,7 +269,7 @@ function PoriedUI:CreateWindow(config)
             WindowObj.ActiveTab = TabScroll
         end
 
-        TabButton.MouseButton1Click:Connect(ActivateTab)
+        TabButton.Activated:Connect(ActivateTab)
 
         if #WindowObj.Tabs == 0 then
             ActivateTab()
@@ -293,7 +278,6 @@ function PoriedUI:CreateWindow(config)
         local TabObj = {Scroll = TabScroll, Button = TabButton, Stroke = TabStroke}
         table.insert(WindowObj.Tabs, TabObj)
 
-        -- Section
         function TabObj:CreateSection(text)
             local SecFrame = Instance.new("Frame")
             SecFrame.Size = UDim2.new(1, 0, 0, 22)
@@ -311,7 +295,6 @@ function PoriedUI:CreateWindow(config)
             SecLabel.Parent = SecFrame
         end
 
-        -- Toggle
         function TabObj:CreateToggle(options)
             options = options or {}
             local Name = options.Name or "Toggle"
@@ -331,7 +314,7 @@ function PoriedUI:CreateWindow(config)
             Stroke.Transparency = Theme.GlassStrokeTransparency
 
             local Label = Instance.new("TextLabel")
-            Label.Size = UDim2.new(1, -60, 1, 0)
+            Label.Size = UDim2.new(1, -65, 1, 0)
             Label.Position = UDim2.new(0, 12, 0, 0)
             Label.Text = Name
             Label.TextColor3 = Theme.TextWhite
@@ -375,14 +358,14 @@ function PoriedUI:CreateWindow(config)
                 SetToggleState(not state)
             end
 
-            SwitchBg.MouseButton1Click:Connect(ToggleState)
+            SwitchBg.Activated:Connect(ToggleState)
             
             local ClickArea = Instance.new("TextButton")
             ClickArea.Size = UDim2.new(1, -60, 1, 0)
             ClickArea.BackgroundTransparency = 1
             ClickArea.Text = ""
             ClickArea.Parent = Frame
-            ClickArea.MouseButton1Click:Connect(ToggleState)
+            ClickArea.Activated:Connect(ToggleState)
 
             local toggleObj = {
                 Name = Name,
@@ -399,7 +382,6 @@ function PoriedUI:CreateWindow(config)
             end
         end
 
-        -- Slider
         function TabObj:CreateSlider(options)
             options = options or {}
             local Name = options.Name or "Slider"
@@ -443,9 +425,10 @@ function PoriedUI:CreateWindow(config)
             ValueText.Parent = Frame
 
             local SliderTrack = Instance.new("Frame")
-            SliderTrack.Size = UDim2.new(1, -24, 0, 6)
-            SliderTrack.Position = UDim2.new(0, 12, 1, -14)
+            SliderTrack.Size = UDim2.new(1, -24, 0, 8)
+            SliderTrack.Position = UDim2.new(0, 12, 1, -16)
             SliderTrack.BackgroundColor3 = Color3.fromRGB(50, 55, 65)
+            SliderTrack.Active = true
             SliderTrack.Parent = Frame
 
             Instance.new("UICorner", SliderTrack).CornerRadius = UDim.new(1, 0)
@@ -486,7 +469,6 @@ function PoriedUI:CreateWindow(config)
             end)
         end
 
-        -- Input Textbox
         function TabObj:CreateInput(options)
             options = options or {}
             local Name = options.Name or "Input"
@@ -536,7 +518,6 @@ function PoriedUI:CreateWindow(config)
             return InputBox
         end
 
-        -- Dropdown
         function TabObj:CreateDropdown(options)
             options = options or {}
             local Name = options.Name or "Dropdown"
@@ -621,7 +602,7 @@ function PoriedUI:CreateWindow(config)
 
                     Instance.new("UICorner", ItemBtn).CornerRadius = UDim.new(0, 6)
 
-                    ItemBtn.MouseButton1Click:Connect(function()
+                    ItemBtn.Activated:Connect(function()
                         SelectedLabel.Text = item
                         expanded = false
                         Tween(Frame, 0.2, {Size = UDim2.new(1, 0, 0, 42)})
@@ -633,7 +614,7 @@ function PoriedUI:CreateWindow(config)
 
             RefreshList(List)
 
-            HeaderBtn.MouseButton1Click:Connect(function()
+            HeaderBtn.Activated:Connect(function()
                 expanded = not expanded
                 local targetHeight = expanded and (42 + #OptionContainer:GetChildren() * 32) or 42
                 Tween(Frame, 0.2, {Size = UDim2.new(1, 0, 0, targetHeight)})
@@ -648,7 +629,6 @@ function PoriedUI:CreateWindow(config)
             }
         end
 
-        -- Button
         function TabObj:CreateButton(options)
             options = options or {}
             local Name = options.Name or "Button"
@@ -670,14 +650,11 @@ function PoriedUI:CreateWindow(config)
             Stroke.Color = Theme.GlassStroke
             Stroke.Transparency = Theme.GlassStrokeTransparency
 
-            BtnFrame.MouseButton1Down:Connect(function()
-                Tween(BtnFrame, 0.1, {Size = UDim2.new(0.97, 0, 0, 38), BackgroundColor3 = Theme.Accent})
-                Tween(BtnFrame, 0.1, {TextColor3 = Color3.fromRGB(0, 0, 0)})
-            end)
-
-            BtnFrame.MouseButton1Up:Connect(function()
-                Tween(BtnFrame, 0.15, {Size = UDim2.new(1, 0, 0, 40), BackgroundColor3 = Theme.ElementBackground})
-                Tween(BtnFrame, 0.15, {TextColor3 = Theme.TextWhite})
+            BtnFrame.Activated:Connect(function()
+                Tween(BtnFrame, 0.08, {Size = UDim2.new(0.97, 0, 0, 38), BackgroundColor3 = Theme.Accent, TextColor3 = Color3.fromRGB(0, 0, 0)})
+                task.delay(0.1, function()
+                    Tween(BtnFrame, 0.12, {Size = UDim2.new(1, 0, 0, 40), BackgroundColor3 = Theme.ElementBackground, TextColor3 = Theme.TextWhite})
+                end)
                 Callback()
             end)
         end
@@ -685,7 +662,6 @@ function PoriedUI:CreateWindow(config)
         return TabObj
     end
 
-    -- // ВСТРОЕННАЯ СИСТЕМА BIND (ИСПРАВЛЕННОЕ ПЕРЕТАСКИВАНИЕ КНОПОК) // --
     function WindowObj:CreateBindsTab()
         local BindTab = WindowObj:CreateTab("Binds")
         BindTab:CreateSection("Quick Action Binds")
@@ -715,7 +691,6 @@ function PoriedUI:CreateWindow(config)
             end
         })
 
-        -- Генерация плавающей кнопки бинда
         BindTab:CreateButton({
             Name = "Create Quick-Bind Button",
             Callback = function()
@@ -731,7 +706,6 @@ function PoriedUI:CreateWindow(config)
 
                 if not targetToggle then return end
 
-                -- СОЗДАНИЕ КРУГЛОЙ КНОПКИ BIND (44x44 px)
                 local BindBtnFrame = Instance.new("Frame")
                 BindBtnFrame.Name = "BindBtn_" .. bindLabelText
                 BindBtnFrame.Size = UDim2.new(0, 44, 0, 44)
@@ -755,7 +729,6 @@ function PoriedUI:CreateWindow(config)
                 BindTextLabel.Font = Enum.Font.GothamBold
                 BindTextLabel.Parent = BindBtnFrame
 
-                -- УМНОЕ ПЕРЕТАСКИВАНИЕ И КЛИК ДЛЯ КНОПОК БИНДА
                 MakeDraggableAndClickable(BindBtnFrame, BindTextLabel, function()
                     targetToggle.Toggle()
                     local newState = targetToggle.GetState()
