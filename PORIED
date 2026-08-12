@@ -1,4 +1,4 @@
--- [[ PORIED UI FRAMEWORK V6 - COMPACT OVERLAY & FIXED TAB ORDER ]] --
+-- [[ PORIED UI FRAMEWORK V7 - FIXED HEADER ANCHOR ]] --
 -- Style: Soft Dark Glass | Accent: Emerald Green | Touch Native
 
 local PoriedUI = {}
@@ -137,7 +137,7 @@ function PoriedUI:CreateWindow(config)
 
     local TabListLayout = Instance.new("UIListLayout")
     TabListLayout.FillDirection = Enum.FillDirection.Horizontal
-    TabListLayout.SortOrder = Enum.SortOrder.LayoutOrder -- Строгая сортировка вкладок
+    TabListLayout.SortOrder = Enum.SortOrder.LayoutOrder
     TabListLayout.Padding = UDim.new(0, 6)
     TabListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
     TabListLayout.Parent = TabBarScroller
@@ -303,7 +303,7 @@ function PoriedUI:CreateWindow(config)
         TabButton.TextColor3 = Theme.TextDark
         TabButton.TextSize = 12
         TabButton.Font = Enum.Font.GothamMedium
-        TabButton.TextStrokeTransparency = 0.4 -- Обводка текста во вкладках
+        TabButton.TextStrokeTransparency = 0.4
         TabButton.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
         TabButton.BackgroundColor3 = Theme.ElementBackground
         TabButton.BackgroundTransparency = 0.5
@@ -749,7 +749,7 @@ function PoriedUI:CreateWindow(config)
         return TabObj
     end
 
-    -- // НОВЫЙ КОМПАКТНЫЙ ВЫПРАДАЮЩИЙ ВИДЖЕТ В ВКЛАДКЕ CUSTOM // --
+    -- // ВСТРОЕННАЯ ВКЛАДКА "CUSTOM" // --
     function WindowObj:CreateCustomTab()
         if WindowObj.CustomTabCreated then return end
         WindowObj.CustomTabCreated = true
@@ -771,8 +771,14 @@ function PoriedUI:CreateWindow(config)
         Stroke.Color = Theme.GlassStroke
         Stroke.Transparency = Theme.GlassStrokeTransparency
 
+        -- Статичная верхняя шапка (высота 42px)
+        local HeaderBar = Instance.new("Frame")
+        HeaderBar.Size = UDim2.new(1, 0, 0, 42)
+        HeaderBar.BackgroundTransparency = 1
+        HeaderBar.Parent = Frame
+
         local Label = Instance.new("TextLabel")
-        Label.Size = UDim2.new(1, -120, 0, 42)
+        Label.Size = UDim2.new(1, -120, 1, 0)
         Label.Position = UDim2.new(0, 12, 0, 0)
         Label.Text = "Overlay Widget"
         Label.TextColor3 = Theme.TextWhite
@@ -780,9 +786,8 @@ function PoriedUI:CreateWindow(config)
         Label.Font = Enum.Font.GothamMedium
         Label.TextXAlignment = Enum.TextXAlignment.Left
         Label.BackgroundTransparency = 1
-        Label.Parent = Frame
+        Label.Parent = HeaderBar
 
-        -- Кнопка расширенных настроек (шестеренка)
         local ExpandBtn = Instance.new("TextButton")
         ExpandBtn.Size = UDim2.new(0, 26, 0, 22)
         ExpandBtn.Position = UDim2.new(1, -82, 0.5, -11)
@@ -792,18 +797,17 @@ function PoriedUI:CreateWindow(config)
         ExpandBtn.TextSize = 12
         ExpandBtn.Font = Enum.Font.GothamBold
         ExpandBtn.Visible = OverlaySettings.Enabled
-        ExpandBtn.Parent = Frame
+        ExpandBtn.Parent = HeaderBar
 
         Instance.new("UICorner", ExpandBtn).CornerRadius = UDim.new(0, 6)
 
-        -- Главный тумблер включения Оверлея
         local SwitchBg = Instance.new("TextButton")
         SwitchBg.Size = UDim2.new(0, 42, 0, 22)
         SwitchBg.Position = UDim2.new(1, -50, 0.5, -11)
         SwitchBg.BackgroundColor3 = OverlaySettings.Enabled and Theme.Accent or Color3.fromRGB(50, 55, 65)
         SwitchBg.Text = ""
         SwitchBg.AutoButtonColor = false
-        SwitchBg.Parent = Frame
+        SwitchBg.Parent = HeaderBar
 
         Instance.new("UICorner", SwitchBg).CornerRadius = UDim.new(1, 0)
 
@@ -817,7 +821,7 @@ function PoriedUI:CreateWindow(config)
 
         local ListContainer = Instance.new("Frame")
         ListContainer.Size = UDim2.new(1, -20, 0, 0)
-        ListContainer.Position = UDim2.new(0, 10, 0, 46)
+        ListContainer.Position = UDim2.new(0, 10, 0, 44)
         ListContainer.BackgroundTransparency = 1
         ListContainer.Parent = Frame
 
@@ -834,7 +838,7 @@ function PoriedUI:CreateWindow(config)
         local function UpdateFrameHeight()
             if expanded then
                 local listHeight = #items * 32
-                Tween(Frame, 0.2, {Size = UDim2.new(1, 0, 0, 52 + listHeight)})
+                Tween(Frame, 0.2, {Size = UDim2.new(1, 0, 0, 48 + listHeight)})
             else
                 Tween(Frame, 0.2, {Size = UDim2.new(1, 0, 0, 42)})
             end
