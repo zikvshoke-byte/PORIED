@@ -1,4 +1,4 @@
--- [[ PORIED UI FRAMEWORK V5 - OVERLAY & CUSTOM TAB INTEGRATED ]] --
+-- [[ PORIED UI FRAMEWORK V6 - COMPACT OVERLAY & FIXED TAB ORDER ]] --
 -- Style: Soft Dark Glass | Accent: Emerald Green | Touch Native
 
 local PoriedUI = {}
@@ -137,7 +137,7 @@ function PoriedUI:CreateWindow(config)
 
     local TabListLayout = Instance.new("UIListLayout")
     TabListLayout.FillDirection = Enum.FillDirection.Horizontal
-    TabListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    TabListLayout.SortOrder = Enum.SortOrder.LayoutOrder -- Строгая сортировка вкладок
     TabListLayout.Padding = UDim.new(0, 6)
     TabListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
     TabListLayout.Parent = TabBarScroller
@@ -205,7 +205,7 @@ function PoriedUI:CreateWindow(config)
         end
     end)
 
-    -- // КАПСУЛЬНЫЙ ОВЕРЛЕЙ (FPS | PING | NAME) // --
+    -- // КАПСУЛЬНЫЙ ОВЕРЛЕЙ // --
     local OverlayFrame = Instance.new("Frame")
     OverlayFrame.Name = "PoriedOverlay"
     OverlayFrame.Size = UDim2.new(0, 200, 0, 30)
@@ -238,7 +238,6 @@ function PoriedUI:CreateWindow(config)
         ShowName = true
     }
 
-    -- Обновление статистики в реальном времени
     local fps = 60
     local frameCount = 0
     local lastFpsUpdate = tick()
@@ -292,18 +291,23 @@ function PoriedUI:CreateWindow(config)
         ContentContainer = ContentContainer,
         TabBarScroller = TabBarScroller,
         TabListLayout = TabListLayout,
-        OverlaySettings = OverlaySettings
+        OverlaySettings = OverlaySettings,
+        CustomTabCreated = false,
+        BindsTabCreated = false
     }
 
-    function WindowObj:CreateTab(tabName)
+    function WindowObj:CreateTab(tabName, isSpecialOrder)
         local TabButton = Instance.new("TextButton")
         TabButton.Size = UDim2.new(0, 75, 0, 28)
         TabButton.Text = tabName
         TabButton.TextColor3 = Theme.TextDark
         TabButton.TextSize = 12
         TabButton.Font = Enum.Font.GothamMedium
+        TabButton.TextStrokeTransparency = 0.4 -- Обводка текста во вкладках
+        TabButton.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
         TabButton.BackgroundColor3 = Theme.ElementBackground
         TabButton.BackgroundTransparency = 0.5
+        TabButton.LayoutOrder = isSpecialOrder or #WindowObj.Tabs + 1
         TabButton.Parent = TabBarScroller
 
         Instance.new("UICorner", TabButton).CornerRadius = UDim.new(0, 8)
@@ -745,47 +749,157 @@ function PoriedUI:CreateWindow(config)
         return TabObj
     end
 
-    -- // ВСТРОЕННАЯ ВКЛАДКА "CUSTOM" (НАСТРОЙКА ОВЕРЛЕЯ) // --
+    -- // НОВЫЙ КОМПАКТНЫЙ ВЫПРАДАЮЩИЙ ВИДЖЕТ В ВКЛАДКЕ CUSTOM // --
     function WindowObj:CreateCustomTab()
-        local CustomTab = WindowObj:CreateTab("Custom")
+        if WindowObj.CustomTabCreated then return end
+        WindowObj.CustomTabCreated = true
+
+        local CustomTab = WindowObj:CreateTab("Custom", 998)
         CustomTab:CreateSection("Overlay Settings")
 
-        CustomTab:CreateToggle({
-            Name = "Enable Overlay Widget",
-            Default = true,
-            Callback = function(v)
-                OverlaySettings.Enabled = v
-            end
-        })
+        local expanded = false
 
-        CustomTab:CreateToggle({
-            Name = "Show FPS",
-            Default = true,
-            Callback = function(v)
-                OverlaySettings.ShowFPS = v
-            end
-        })
+        local Frame = Instance.new("Frame")
+        Frame.Size = UDim2.new(1, 0, 0, 42)
+        Frame.BackgroundColor3 = Theme.ElementBackground
+        Frame.BackgroundTransparency = Theme.ElementTransparency
+        Frame.ClipsDescendants = true
+        Frame.Parent = CustomTab.Scroll
 
-        CustomTab:CreateToggle({
-            Name = "Show Ping",
-            Default = true,
-            Callback = function(v)
-                OverlaySettings.ShowPing = v
-            end
-        })
+        Instance.new("UICorner", Frame).CornerRadius = Theme.CornerRadius
+        local Stroke = Instance.new("UIStroke", Frame)
+        Stroke.Color = Theme.GlassStroke
+        Stroke.Transparency = Theme.GlassStrokeTransparency
 
-        CustomTab:CreateToggle({
-            Name = "Show Player Name",
-            Default = true,
-            Callback = function(v)
-                OverlaySettings.ShowName = v
+        local Label = Instance.new("TextLabel")
+        Label.Size = UDim2.new(1, -120, 0, 42)
+        Label.Position = UDim2.new(0, 12, 0, 0)
+        Label.Text = "Overlay Widget"
+        Label.TextColor3 = Theme.TextWhite
+        Label.TextSize = 13
+        Label.Font = Enum.Font.GothamMedium
+        Label.TextXAlignment = Enum.TextXAlignment.Left
+        Label.BackgroundTransparency = 1
+        Label.Parent = Frame
+
+        -- Кнопка расширенных настроек (шестеренка)
+        local ExpandBtn = Instance.new("TextButton")
+        ExpandBtn.Size = UDim2.new(0, 26, 0, 22)
+        ExpandBtn.Position = UDim2.new(1, -82, 0.5, -11)
+        ExpandBtn.BackgroundColor3 = Color3.fromRGB(40, 45, 55)
+        ExpandBtn.Text = "⚙"
+        ExpandBtn.TextColor3 = Theme.Accent
+        ExpandBtn.TextSize = 12
+        ExpandBtn.Font = Enum.Font.GothamBold
+        ExpandBtn.Visible = OverlaySettings.Enabled
+        ExpandBtn.Parent = Frame
+
+        Instance.new("UICorner", ExpandBtn).CornerRadius = UDim.new(0, 6)
+
+        -- Главный тумблер включения Оверлея
+        local SwitchBg = Instance.new("TextButton")
+        SwitchBg.Size = UDim2.new(0, 42, 0, 22)
+        SwitchBg.Position = UDim2.new(1, -50, 0.5, -11)
+        SwitchBg.BackgroundColor3 = OverlaySettings.Enabled and Theme.Accent or Color3.fromRGB(50, 55, 65)
+        SwitchBg.Text = ""
+        SwitchBg.AutoButtonColor = false
+        SwitchBg.Parent = Frame
+
+        Instance.new("UICorner", SwitchBg).CornerRadius = UDim.new(1, 0)
+
+        local Knob = Instance.new("Frame")
+        Knob.Size = UDim2.new(0, 18, 0, 18)
+        Knob.Position = OverlaySettings.Enabled and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+        Knob.BackgroundColor3 = Theme.TextWhite
+        Knob.Parent = SwitchBg
+
+        Instance.new("UICorner", Knob).CornerRadius = UDim.new(1, 0)
+
+        local ListContainer = Instance.new("Frame")
+        ListContainer.Size = UDim2.new(1, -20, 0, 0)
+        ListContainer.Position = UDim2.new(0, 10, 0, 46)
+        ListContainer.BackgroundTransparency = 1
+        ListContainer.Parent = Frame
+
+        local ListLayout = Instance.new("UIListLayout")
+        ListLayout.Padding = UDim.new(0, 6)
+        ListLayout.Parent = ListContainer
+
+        local items = {
+            { Key = "ShowFPS", Label = "FPS Counter" },
+            { Key = "ShowPing", Label = "Ping Monitor" },
+            { Key = "ShowName", Label = "Player Name" }
+        }
+
+        local function UpdateFrameHeight()
+            if expanded then
+                local listHeight = #items * 32
+                Tween(Frame, 0.2, {Size = UDim2.new(1, 0, 0, 52 + listHeight)})
+            else
+                Tween(Frame, 0.2, {Size = UDim2.new(1, 0, 0, 42)})
             end
-        })
+        end
+
+        for _, item in ipairs(items) do
+            local isActive = OverlaySettings[item.Key]
+
+            local ItemBtn = Instance.new("TextButton")
+            ItemBtn.Size = UDim2.new(1, 0, 0, 28)
+            ItemBtn.BackgroundColor3 = isActive and Theme.Accent or Color3.fromRGB(40, 45, 55)
+            ItemBtn.BackgroundTransparency = isActive and 0 or 0.3
+            ItemBtn.Text = "  " .. item.Label
+            ItemBtn.TextColor3 = isActive and Color3.fromRGB(0, 0, 0) or Theme.TextWhite
+            ItemBtn.TextSize = 12
+            ItemBtn.Font = Enum.Font.GothamMedium
+            ItemBtn.TextXAlignment = Enum.TextXAlignment.Left
+            ItemBtn.Parent = ListContainer
+
+            Instance.new("UICorner", ItemBtn).CornerRadius = UDim.new(0, 6)
+
+            ItemBtn.Activated:Connect(function()
+                OverlaySettings[item.Key] = not OverlaySettings[item.Key]
+                local activeNow = OverlaySettings[item.Key]
+                
+                if activeNow then
+                    Tween(ItemBtn, 0.15, {BackgroundColor3 = Theme.Accent, BackgroundTransparency = 0, TextColor3 = Color3.fromRGB(0, 0, 0)})
+                else
+                    Tween(ItemBtn, 0.15, {BackgroundColor3 = Color3.fromRGB(40, 45, 55), BackgroundTransparency = 0.3, TextColor3 = Theme.TextWhite})
+                end
+            end)
+        end
+
+        local function ToggleOverlay()
+            OverlaySettings.Enabled = not OverlaySettings.Enabled
+            local state = OverlaySettings.Enabled
+            
+            ExpandBtn.Visible = state
+            if state then
+                Tween(SwitchBg, 0.2, {BackgroundColor3 = Theme.Accent})
+                Tween(Knob, 0.2, {Position = UDim2.new(1, -20, 0.5, -9)})
+            else
+                Tween(SwitchBg, 0.2, {BackgroundColor3 = Color3.fromRGB(50, 55, 65)})
+                Tween(Knob, 0.2, {Position = UDim2.new(0, 2, 0.5, -9)})
+                if expanded then
+                    expanded = false
+                    UpdateFrameHeight()
+                end
+            end
+        end
+
+        SwitchBg.Activated:Connect(ToggleOverlay)
+
+        ExpandBtn.Activated:Connect(function()
+            expanded = not expanded
+            UpdateFrameHeight()
+        end)
     end
 
     -- // ВСТРОЕННАЯ ВКЛАДКА "BINDS" // --
     function WindowObj:CreateBindsTab()
-        local BindTab = WindowObj:CreateTab("Binds")
+        if WindowObj.BindsTabCreated then return end
+        WindowObj.BindsTabCreated = true
+
+        local BindTab = WindowObj:CreateTab("Binds", 999)
         BindTab:CreateSection("Quick Action Binds")
 
         local selectedToggleName = ""
@@ -866,7 +980,7 @@ function PoriedUI:CreateWindow(config)
         })
     end
 
-    -- Автоматическое вызовы встроенных вкладок
+    -- Автоматические вызовы
     WindowObj:CreateCustomTab()
     WindowObj:CreateBindsTab()
 
