@@ -1,4 +1,4 @@
--- [[ PORIED UI FRAMEWORK V9 - FIXED THEMES, SLIDERS, BINDS & LOCALIZATION ]] --
+-- [[ PORIED UI FRAMEWORK V10 - FIXED EMPTY MENU BUG ]] --
 -- Style: Soft Dark Glass | Accent: Multi-Theme | Touch Native
 
 local PoriedUI = {}
@@ -58,7 +58,7 @@ local Translations = {
 }
 
 local CurrentLang = "EN"
-local CurrentFont = Enum.Font.GothamMedium
+local CurrentFontMedium = Enum.Font.GothamMedium
 local CurrentFontBold = Enum.Font.GothamBold
 
 local Theme = {
@@ -131,6 +131,33 @@ end
 function PoriedUI:CreateWindow(config)
     config = config or {}
     local TitleText = config.Name or "Poried Universal"
+
+    -- Загрузка сохраненного языка и шрифта ДО создания объектов
+    pcall(function()
+        if readfile and isfile and isfile("poried_configs/poried_lang.json") then
+            local data = HttpService:JSONDecode(readfile("poried_configs/poried_lang.json"))
+            if data and data.Lang then CurrentLang = data.Lang end
+        end
+        if readfile and isfile and isfile("poried_configs/poried_font.json") then
+            local data = HttpService:JSONDecode(readfile("poried_configs/poried_font.json"))
+            if data and data.FontName then
+                local fontName = data.FontName
+                if fontName == "SourceSans" then
+                    CurrentFontMedium = Enum.Font.SourceSans
+                    CurrentFontBold = Enum.Font.SourceSansBold
+                elseif fontName == "RobotoMono" then
+                    CurrentFontMedium = Enum.Font.RobotoMono
+                    CurrentFontBold = Enum.Font.RobotoMono
+                elseif fontName == "Ubuntu" then
+                    CurrentFontMedium = Enum.Font.Ubuntu
+                    CurrentFontBold = Enum.Font.Ubuntu
+                elseif fontName == "FredokaOne" then
+                    CurrentFontMedium = Enum.Font.FredokaOne
+                    CurrentFontBold = Enum.Font.FredokaOne
+                end
+            end
+        end
+    end)
 
     local ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = "PoriedUI_" .. math.random(1000, 9999)
@@ -601,7 +628,6 @@ function PoriedUI:CreateWindow(config)
             end
         end
 
-        -- ИСПРАВЛЕННЫЙ СЛАЙДЕР С РУЧНЫМ ВВОДОМ
         function TabObj:CreateSlider(options)
             options = options or {}
             local Name = options.Name or "Slider"
@@ -688,7 +714,6 @@ function PoriedUI:CreateWindow(config)
                 end
             end)
 
-            -- Ручной ввод числа с обработкой
             ValueText.FocusLost:Connect(function()
                 local num = tonumber(ValueText.Text)
                 if num then
@@ -927,7 +952,7 @@ function PoriedUI:CreateWindow(config)
         WindowObj.CustomTabCreated = true
 
         local CustomTab = WindowObj:CreateTab("Custom", 997)
-        local SecOverlay = CustomTab:CreateSection(Translations[CurrentLang].OverlayWidget)
+        CustomTab:CreateSection(Translations[CurrentLang].OverlayWidget)
 
         local expanded = false
 
@@ -1133,7 +1158,6 @@ function PoriedUI:CreateWindow(config)
             TBtn.Activated:Connect(function()
                 activeThemeName = th.Name
                 SetThemeColor(th.Color or Theme.Accent, th.IsRainbow or false)
-                -- Сохранение имени темы
                 pcall(function()
                     if isfolder and not isfolder("poried_configs") then makefolder("poried_configs") end
                     local themeData = { ThemeName = th.Name, IsRainbow = th.IsRainbow or false, R = (th.Color and th.Color.R) or 0, G = (th.Color and th.Color.G) or 0, B = (th.Color and th.Color.B) or 0 }
@@ -1143,7 +1167,7 @@ function PoriedUI:CreateWindow(config)
             end)
         end
 
-        -- ВЫБОР ЯЗЫКА (LANGUAGE SELECTOR)
+        -- ВЫБОР ЯЗЫКА
         CustomTab:CreateSection(Translations[CurrentLang].LanguageSelector)
         CustomTab:CreateDropdown({
             Name = "Language",
@@ -1158,7 +1182,7 @@ function PoriedUI:CreateWindow(config)
             end
         })
 
-        -- ВЫБОР ШРИФТА (FONT SELECTOR)
+        -- ВЫБОР ШРИФТА
         CustomTab:CreateSection(Translations[CurrentLang].FontSelector)
         CustomTab:CreateDropdown({
             Name = "Font Style",
@@ -1426,7 +1450,6 @@ function PoriedUI:CreateWindow(config)
                     Tween(BindTextLabel, 0.2, {TextColor3 = Theme.Accent})
                 end
             end, function()
-                -- Обновление сохраненных координат при завершении перетаскивания
                 for _, b in ipairs(SavedBindsData) do
                     if b.ToggleName == toggleName and b.Label == labelText then
                         b.ScaleX = BindBtnFrame.Position.X.Scale
@@ -1440,7 +1463,6 @@ function PoriedUI:CreateWindow(config)
             end)
         end
 
-        -- Восстановление сохраненных биндов из файла
         pcall(function()
             if readfile and isfile and isfile("poried_configs/poried_binds.json") then
                 local data = HttpService:JSONDecode(readfile("poried_configs/poried_binds.json"))
@@ -1476,33 +1498,6 @@ function PoriedUI:CreateWindow(config)
             end
         })
     end
-
-    -- Загрузка языка и шрифта
-    pcall(function()
-        if readfile and isfile and isfile("poried_configs/poried_lang.json") then
-            local data = HttpService:JSONDecode(readfile("poried_configs/poried_lang.json"))
-            if data and data.Lang then CurrentLang = data.Lang end
-        end
-        if readfile and isfile and isfile("poried_configs/poried_font.json") then
-            local data = HttpService:JSONDecode(readfile("poried_configs/poried_font.json"))
-            if data and data.FontName then
-                local fontName = data.FontName
-                if fontName == "SourceSans" then
-                    CurrentFontMedium = Enum.Font.SourceSans
-                    CurrentFontBold = Enum.Font.SourceSansBold
-                elseif fontName == "RobotoMono" then
-                    CurrentFontMedium = Enum.Font.RobotoMono
-                    CurrentFontBold = Enum.Font.RobotoMono
-                elseif fontName == "Ubuntu" then
-                    CurrentFontMedium = Enum.Font.Ubuntu
-                    CurrentFontBold = Enum.Font.Ubuntu
-                elseif fontName == "FredokaOne" then
-                    CurrentFontMedium = Enum.Font.FredokaOne
-                    CurrentFontBold = Enum.Font.FredokaOne
-                end
-            end
-        end
-    end)
 
     -- Автоматические вызовы
     WindowObj:CreateCustomTab()
