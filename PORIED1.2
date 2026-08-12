@@ -1,5 +1,5 @@
--- [[ PORIED UI FRAMEWORK V7 - FIXED HEADER ANCHOR ]] --
--- Style: Soft Dark Glass | Accent: Emerald Green | Touch Native
+-- [[ PORIED UI FRAMEWORK V8 - CONFIGS & THEME SELECTOR ]] --
+-- Style: Soft Dark Glass | Accent: Multi-Theme | File I/O Config System
 
 local PoriedUI = {}
 PoriedUI.__index = PoriedUI
@@ -8,6 +8,7 @@ local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local StatsService = game:GetService("Stats")
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local LocalPlayer = Players.LocalPlayer
@@ -281,6 +282,8 @@ function PoriedUI:CreateWindow(config)
         end
     end)
 
+    local AccentElements = { PStroke, PText, OverlayStroke }
+
     local WindowObj = {
         ScreenGui = ScreenGui,
         MainFrame = MainFrame,
@@ -288,13 +291,82 @@ function PoriedUI:CreateWindow(config)
         ActiveTab = nil,
         RegisteredToggles = {},
         RegisteredToggleNames = {},
+        RegisteredSliders = {},
+        RegisteredDropdowns = {},
         ContentContainer = ContentContainer,
         TabBarScroller = TabBarScroller,
         TabListLayout = TabListLayout,
         OverlaySettings = OverlaySettings,
         CustomTabCreated = false,
-        BindsTabCreated = false
+        ConfigTabCreated = false,
+        BindsTabCreated = false,
+        AccentElements = AccentElements
     }
+
+    -- Функция динамического обновления акцентного цвета
+    local RainbowConnection = nil
+    local function SetThemeColor(color, isRainbow)
+        if RainbowConnection then
+            RainbowConnection:Disconnect()
+            RainbowConnection = nil
+        end
+
+        local function ApplyColor(col)
+            Theme.Accent = col
+            PStroke.Color = col
+            PText.TextColor3 = col
+            OverlayStroke.Color = col
+
+            for _, t in pairs(WindowObj.Tabs) do
+                if t.Scroll.Visible then
+                    t.Button.BackgroundColor3 = col
+                    t.Stroke.Color = col
+                end
+            end
+
+            for _, toggle in ipairs(WindowObj.RegisteredToggles) do
+                if toggle.GetState() then
+                    toggle.UpdateColor(col)
+                end
+            end
+
+            for _, slider in ipairs(WindowObj.RegisteredSliders) do
+                slider.UpdateColor(col)
+            end
+        end
+
+        if isRainbow then
+            RainbowConnection = RunService.RenderStepped:Connect(function()
+                local hue = (tick() % 4) / 4
+                ApplyColor(Color3.fromHSV(hue, 0.85, 1))
+            end)
+        else
+            ApplyColor(color)
+        end
+
+        -- Сохранение темы в файл
+        pcall(function()
+            if isfolder and not isfolder("poried_configs") then makefolder("poried_configs") end
+            local themeData = { IsRainbow = isRainbow, R = color.R, G = color.G, B = color.B }
+            if writefile then
+                writefile("poried_configs/poried_theme.json", HttpService:JSONEncode(themeData))
+            end
+        end)
+    end
+
+    -- Загрузка сохраненной темы при запуске
+    pcall(function()
+        if readfile and isfile and isfile("poried_configs/poried_theme.json") then
+            local data = HttpService:JSONDecode(readfile("poried_configs/poried_theme.json"))
+            if data then
+                if data.IsRainbow then
+                    SetThemeColor(Theme.Accent, true)
+                elseif data.R and data.G and data.B then
+                    SetThemeColor(Color3.new(data.R, data.G, data.B), false)
+                end
+            end
+        end
+    end)
 
     function WindowObj:CreateTab(tabName, isSpecialOrder)
         local TabButton = Instance.new("TextButton")
@@ -458,7 +530,8 @@ function PoriedUI:CreateWindow(config)
                 Name = Name,
                 GetState = function() return state end,
                 SetState = SetToggleState,
-                Toggle = ToggleState
+                Toggle = ToggleState,
+                UpdateColor = function(col) if state then SwitchBg.BackgroundColor3 = col end end
             }
 
             table.insert(WindowObj.RegisteredToggles, toggleObj)
@@ -554,6 +627,19 @@ function PoriedUI:CreateWindow(config)
                     dragging = false
                 end
             end)
+
+            local sliderObj = {
+                Name = Name,
+                GetValue = function() return value end,
+                SetValue = function(newVal)
+                    value = math.clamp(newVal, Min, Max)
+                    ValueText.Text = tostring(value)
+                    Tween(SliderFill, 0.2, {Size = UDim2.new((value - Min) / (Max - Min), 0, 1, 0)})
+                    Callback(value)
+                end,
+                UpdateColor = function(col) SliderFill.BackgroundColor3 = col; ValueText.TextColor3 = col end
+            }
+            table.insert(WindowObj.RegisteredSliders, sliderObj)
         end
 
         function TabObj:CreateInput(options)
@@ -708,6 +794,16 @@ function PoriedUI:CreateWindow(config)
                 Tween(Arrow, 0.2, {Rotation = expanded and 180 or 0})
             end)
 
+            local dropdownObj = {
+                Name = Name,
+                GetValue = function() return SelectedLabel.Text end,
+                SetValue = function(val)
+                    SelectedLabel.Text = val
+                    Callback({val})
+                end
+            }
+            table.insert(WindowObj.RegisteredDropdowns, dropdownObj)
+
             return {
                 Refresh = function(_, newList)
                     List = newList
@@ -754,7 +850,7 @@ function PoriedUI:CreateWindow(config)
         if WindowObj.CustomTabCreated then return end
         WindowObj.CustomTabCreated = true
 
-        local CustomTab = WindowObj:CreateTab("Custom", 998)
+        local CustomTab = WindowObj:CreateTab("Custom", 997)
         CustomTab:CreateSection("Overlay Settings")
 
         local expanded = false
@@ -771,7 +867,6 @@ function PoriedUI:CreateWindow(config)
         Stroke.Color = Theme.GlassStroke
         Stroke.Transparency = Theme.GlassStrokeTransparency
 
-        -- Статичная верхняя шапка (высота 42px)
         local HeaderBar = Instance.new("Frame")
         HeaderBar.Size = UDim2.new(1, 0, 0, 42)
         HeaderBar.BackgroundTransparency = 1
@@ -896,6 +991,207 @@ function PoriedUI:CreateWindow(config)
             expanded = not expanded
             UpdateFrameHeight()
         end)
+
+        -- СЕКЦИЯ СМЕНЫ ТЕМ (THEME SELECTOR)
+        CustomTab:CreateSection("Theme Selector")
+
+        local ThemesList = {
+            { Name = "Emerald Green", Color = Color3.fromRGB(0, 230, 118) },
+            { Name = "Neon Purple", Color = Color3.fromRGB(170, 0, 255) },
+            { Name = "Cyber Cyan", Color = Color3.fromRGB(0, 210, 255) },
+            { Name = "Crimson Red", Color = Color3.fromRGB(255, 45, 85) },
+            { Name = "Gold Yellow", Color = Color3.fromRGB(255, 204, 0) },
+            { Name = "RGB Rainbow", Color = nil, IsRainbow = true }
+        }
+
+        local activeThemeName = "Emerald Green"
+        pcall(function()
+            if readfile and isfile and isfile("poried_configs/poried_theme.json") then
+                local data = HttpService:JSONDecode(readfile("poried_configs/poried_theme.json"))
+                if data and data.IsRainbow then activeThemeName = "RGB Rainbow" end
+            end
+        end)
+
+        local ThemeButtonsContainer = Instance.new("Frame")
+        ThemeButtonsContainer.Size = UDim2.new(1, 0, 0, #ThemesList * 34)
+        ThemeButtonsContainer.BackgroundTransparency = 1
+        ThemeButtonsContainer.Parent = CustomTab.Scroll
+
+        local ThemeLayout = Instance.new("UIListLayout")
+        ThemeLayout.Padding = UDim.new(0, 6)
+        ThemeLayout.Parent = ThemeButtonsContainer
+
+        local ThemeBtns = {}
+
+        local function RefreshThemeUI()
+            for name, btn in pairs(ThemeBtns) do
+                if name == activeThemeName then
+                    local targetColor = Theme.Accent
+                    Tween(btn, 0.2, {BackgroundColor3 = targetColor, BackgroundTransparency = 0, TextColor3 = Color3.fromRGB(0, 0, 0)})
+                else
+                    Tween(btn, 0.2, {BackgroundColor3 = Color3.fromRGB(40, 45, 55), BackgroundTransparency = 0.3, TextColor3 = Theme.TextWhite})
+                end
+            end
+        end
+
+        for _, th in ipairs(ThemesList) do
+            local TBtn = Instance.new("TextButton")
+            TBtn.Size = UDim2.new(1, 0, 0, 28)
+            TBtn.BackgroundColor3 = (th.Name == activeThemeName) and (th.Color or Theme.Accent) or Color3.fromRGB(40, 45, 55)
+            TBtn.BackgroundTransparency = (th.Name == activeThemeName) and 0 or 0.3
+            TBtn.Text = "  " .. th.Name
+            TBtn.TextColor3 = (th.Name == activeThemeName) and Color3.fromRGB(0, 0, 0) or Theme.TextWhite
+            TBtn.TextSize = 12
+            TBtn.Font = Enum.Font.GothamBold
+            TBtn.TextXAlignment = Enum.TextXAlignment.Left
+            TBtn.Parent = ThemeButtonsContainer
+
+            Instance.new("UICorner", TBtn).CornerRadius = UDim.new(0, 6)
+
+            ThemeBtns[th.Name] = TBtn
+
+            TBtn.Activated:Connect(function()
+                activeThemeName = th.Name
+                SetThemeColor(th.Color or Theme.Accent, th.IsRainbow or false)
+                RefreshThemeUI()
+            end)
+        end
+    end
+
+    -- // ВСТРОЕННАЯ ВКЛАДКА "CONFIG" // --
+    function WindowObj:CreateConfigTab()
+        if WindowObj.ConfigTabCreated then return end
+        WindowObj.ConfigTabCreated = true
+
+        local ConfigTab = WindowObj:CreateTab("Config", 998)
+        ConfigTab:CreateSection("Save Current Config")
+
+        local newConfigName = ""
+        local selectedConfigName = ""
+
+        ConfigTab:CreateInput({
+            Name = "Config Name",
+            PlaceholderText = "e.g. Legit, Rage",
+            Callback = function(txt)
+                newConfigName = txt
+            end
+        })
+
+        local function GetSavedConfigNames()
+            local list = {}
+            pcall(function()
+                if isfolder and not isfolder("poried_configs") then makefolder("poried_configs") end
+                if listfiles then
+                    for _, file in ipairs(listfiles("poried_configs")) do
+                        if file:sub(-5) == ".json" and not file:find("poried_theme.json") then
+                            local name = file:match("([^/^\\]+)%.json$")
+                            if name then table.insert(list, name) end
+                        end
+                    end
+                end
+            end)
+            return list
+        end
+
+        ConfigTab:CreateButton({
+            Name = "Save Current Config",
+            Callback = function()
+                if newConfigName == "" then return end
+                
+                local data = {
+                    Toggles = {},
+                    Sliders = {},
+                    Dropdowns = {},
+                    Overlay = WindowObj.OverlaySettings
+                }
+
+                for _, t in ipairs(WindowObj.RegisteredToggles) do
+                    data.Toggles[t.Name] = t.GetState()
+                end
+                for _, s in ipairs(WindowObj.RegisteredSliders) do
+                    data.Sliders[s.Name] = s.GetValue()
+                end
+                for _, d in ipairs(WindowObj.RegisteredDropdowns) do
+                    data.Dropdowns[d.Name] = d.GetValue()
+                end
+
+                pcall(function()
+                    if isfolder and not isfolder("poried_configs") then makefolder("poried_configs") end
+                    writefile("poried_configs/" .. newConfigName .. ".json", HttpService:JSONEncode(data))
+                end)
+
+                if WindowObj.ConfigDropdownObj then
+                    WindowObj.ConfigDropdownObj:Refresh(GetSavedConfigNames())
+                end
+            end
+        })
+
+        ConfigTab:CreateSection("Manage Configs")
+
+        WindowObj.ConfigDropdownObj = ConfigTab:CreateDropdown({
+            Name = "Select Config",
+            Options = GetSavedConfigNames(),
+            Callback = function(selected)
+                selectedConfigName = selected[1]
+            end
+        })
+
+        ConfigTab:CreateButton({
+            Name = "Load Selected Config",
+            Callback = function()
+                if selectedConfigName == "" then return end
+                pcall(function()
+                    if isfile and isfile("poried_configs/" .. selectedConfigName .. ".json") then
+                        local content = readfile("poried_configs/" .. selectedConfigName .. ".json")
+                        local data = HttpService:JSONDecode(content)
+                        if data then
+                            if data.Toggles then
+                                for name, state in pairs(data.Toggles) do
+                                    for _, t in ipairs(WindowObj.RegisteredToggles) do
+                                        if t.Name == name then t.SetState(state) end
+                                    end
+                                end
+                            end
+                            if data.Sliders then
+                                for name, val in pairs(data.Sliders) do
+                                    for _, s in ipairs(WindowObj.RegisteredSliders) do
+                                        if s.Name == name then s.SetValue(val) end
+                                    end
+                                end
+                            end
+                            if data.Dropdowns then
+                                for name, val in pairs(data.Dropdowns) do
+                                    for _, d in ipairs(WindowObj.RegisteredDropdowns) do
+                                        if d.Name == name then d.SetValue(val) end
+                                    end
+                                end
+                            end
+                            if data.Overlay then
+                                for k, v in pairs(data.Overlay) do
+                                    WindowObj.OverlaySettings[k] = v
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+        })
+
+        ConfigTab:CreateButton({
+            Name = "Delete Selected Config",
+            Callback = function()
+                if selectedConfigName == "" then return end
+                pcall(function()
+                    if isfile and isfile("poried_configs/" .. selectedConfigName .. ".json") then
+                        delfile("poried_configs/" .. selectedConfigName .. ".json")
+                    end
+                end)
+                selectedConfigName = ""
+                if WindowObj.ConfigDropdownObj then
+                    WindowObj.ConfigDropdownObj:Refresh(GetSavedConfigNames())
+                end
+            end
+        })
     end
 
     -- // ВСТРОЕННАЯ ВКЛАДКА "BINDS" // --
@@ -984,8 +1280,9 @@ function PoriedUI:CreateWindow(config)
         })
     end
 
-    -- Автоматические вызовы
+    -- Автоматические вызовы специальных вкладок
     WindowObj:CreateCustomTab()
+    WindowObj:CreateConfigTab()
     WindowObj:CreateBindsTab()
 
     return WindowObj
