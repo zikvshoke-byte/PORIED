@@ -1,4 +1,4 @@
--- [[ PORIED UI FRAMEWORK V11 - REALTIME LANG/FONT & CONFIG-ONLY BINDS ]] --
+-- [[ PORIED UI FRAMEWORK V12 - FIXED CONFIG LIST & BINDS SAVE ]] --
 -- Style: Soft Dark Glass | Accent: Multi-Theme | Touch Native
 
 local PoriedUI = {}
@@ -132,7 +132,6 @@ function PoriedUI:CreateWindow(config)
     config = config or {}
     local TitleText = config.Name or "Poried Universal"
 
-    -- Предварительная загрузка языка и шрифта
     pcall(function()
         if readfile and isfile and isfile("poried_configs/poried_lang.json") then
             local data = HttpService:JSONDecode(readfile("poried_configs/poried_lang.json"))
@@ -395,7 +394,6 @@ function PoriedUI:CreateWindow(config)
     RegisterText(PText, true)
     RegisterText(OverlayLabel, true)
 
-    -- РЕАЛЬНОЕ ВРЕМЯ: СМЕНА ЯЗЫКА
     function WindowObj:SetLanguage(langKey)
         CurrentLang = langKey
         for _, objData in ipairs(WindowObj.TranslatableObjects) do
@@ -412,7 +410,6 @@ function PoriedUI:CreateWindow(config)
         end)
     end
 
-    -- РЕАЛЬНОЕ ВРЕМЯ: СМЕНА ШРИФТА
     function WindowObj:SetFont(fontName)
         local medium, bold
         if fontName == "SourceSans" then
@@ -441,7 +438,6 @@ function PoriedUI:CreateWindow(config)
         end)
     end
 
-    -- Динамическая смена темы
     local RainbowConnection = nil
     local function SetThemeColor(color, isRainbow)
         if RainbowConnection then
@@ -940,11 +936,12 @@ function PoriedUI:CreateWindow(config)
             OptionLayout.Parent = OptionContainer
 
             local function RefreshList(newList)
+                List = newList or {}
                 for _, child in pairs(OptionContainer:GetChildren()) do
                     if child:IsA("TextButton") then child:Destroy() end
                 end
 
-                for _, item in ipairs(newList or List) do
+                for _, item in ipairs(List) do
                     local ItemBtn = Instance.new("TextButton")
                     ItemBtn.Size = UDim2.new(1, 0, 0, 28)
                     ItemBtn.BackgroundColor3 = Color3.fromRGB(40, 45, 55)
@@ -990,7 +987,6 @@ function PoriedUI:CreateWindow(config)
 
             return {
                 Refresh = function(_, newList)
-                    List = newList
                     RefreshList(newList)
                 end
             }
@@ -1185,7 +1181,7 @@ function PoriedUI:CreateWindow(config)
             UpdateFrameHeight()
         end)
 
-        -- СЕКЦИЯ СМЕНЫ ТЕМ (THEME SELECTOR)
+        -- СЕКЦИЯ СМЕНЫ ТЕМ
         CustomTab:CreateSection("Theme Selector", "ThemeSelector")
 
         local ThemesList = {
@@ -1305,13 +1301,17 @@ function PoriedUI:CreateWindow(config)
 
         local function GetSavedConfigNames()
             local list = {}
+            local seen = {}
             pcall(function()
                 if isfolder and not isfolder("poried_configs") then makefolder("poried_configs") end
                 if listfiles then
                     for _, file in ipairs(listfiles("poried_configs")) do
-                        if file:sub(-5) == ".json" and not file:find("poried_theme") and not file:find("poried_lang") and not file:find("poried_font") then
-                            local name = file:match("([^/^\\]+)%.json$")
-                            if name then table.insert(list, name) end
+                        if file:sub(-5) == ".json" then
+                            local fileName = file:match("([^/^\\]+)%.json$")
+                            if fileName and not fileName:find("^poried_") and not seen[fileName] then
+                                seen[fileName] = true
+                                table.insert(list, fileName)
+                            end
                         end
                     end
                 end
@@ -1401,7 +1401,6 @@ function PoriedUI:CreateWindow(config)
                                     WindowObj.OverlaySettings[k] = v
                                 end
                             end
-                            -- Восстановление биндов строго из конфига
                             if data.Binds then
                                 WindowObj:ClearAllBinds()
                                 for _, b in ipairs(data.Binds) do
@@ -1436,14 +1435,15 @@ function PoriedUI:CreateWindow(config)
     function WindowObj:GetBindsData()
         local bindsList = {}
         for _, b in ipairs(WindowObj.RegisteredBinds) do
-            if b.Frame and b.Frame.Parent then
+            if b and b.Frame and b.Frame.Parent then
+                local pos = b.Frame.Position
                 table.insert(bindsList, {
-                    ToggleName = b.ToggleName,
-                    Label = b.Label,
-                    ScaleX = b.Frame.Position.X.Scale,
-                    OffsetX = b.Frame.Position.X.Offset,
-                    ScaleY = b.Frame.Position.Y.Scale,
-                    OffsetY = b.Frame.Position.Y.Offset
+                    ToggleName = tostring(b.ToggleName),
+                    Label = tostring(b.Label),
+                    ScaleX = tonumber(pos.X.Scale) or 0.1,
+                    OffsetX = tonumber(pos.X.Offset) or 0,
+                    ScaleY = tonumber(pos.Y.Scale) or 0.3,
+                    OffsetY = tonumber(pos.Y.Offset) or 0
                 })
             end
         end
@@ -1452,7 +1452,7 @@ function PoriedUI:CreateWindow(config)
 
     function WindowObj:ClearAllBinds()
         for _, b in ipairs(WindowObj.RegisteredBinds) do
-            if b.Frame then b.Frame:Destroy() end
+            if b and b.Frame then b.Frame:Destroy() end
         end
         WindowObj.RegisteredBinds = {}
     end
@@ -1471,7 +1471,12 @@ function PoriedUI:CreateWindow(config)
         local BindBtnFrame = Instance.new("Frame")
         BindBtnFrame.Name = "BindBtn_" .. labelText
         BindBtnFrame.Size = UDim2.new(0, 44, 0, 44)
-        BindBtnFrame.Position = UDim2.new(posScaleX or 0.1, posOffsetX or math.random(10, 80), posScaleY or 0.3, posOffsetY or math.random(10, 80))
+        BindBtnFrame.Position = UDim2.new(
+            posScaleX or 0.1, 
+            posOffsetX or math.random(10, 80), 
+            posScaleY or 0.3, 
+            posOffsetY or math.random(10, 80)
+        )
         BindBtnFrame.BackgroundColor3 = targetToggle.GetState() and Theme.Accent or Theme.MainBackground
         BindBtnFrame.BackgroundTransparency = 0.2
         BindBtnFrame.Parent = ScreenGui
