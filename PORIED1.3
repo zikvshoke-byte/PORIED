@@ -1,6 +1,6 @@
--- [[ OPTIMIZED PORIED UI LITE ]] --
--- Высокая производительность для Mobile (Delta, Fluxus, Hydrogen, Codex)
--- Стиль: Soft Dark Glass | Полная совместимость по API
+-- [[ OPTIMIZED PORIED UI FULL EDITION ]] --
+-- Включает: Tabs, Toggles, Sliders, Dropdowns, Inputs, Buttons, ColorPickers, Keybinds, Configs
+-- Оптимизировано для Mobile & PC (Delta, Fluxus, Hydrogen, Codex)
 
 local PoriedUI = {}
 PoriedUI.__index = PoriedUI
@@ -9,6 +9,7 @@ local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local StatsService = game:GetService("Stats")
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local LocalPlayer = Players.LocalPlayer
@@ -30,14 +31,13 @@ local Theme = {
 local FontMedium = Enum.Font.GothamMedium
 local FontBold = Enum.Font.GothamBold
 
--- Оптимизированный быстрый твин
 local function FastTween(instance, duration, properties)
     local tween = TweenService:Create(instance, TweenInfo.new(duration, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), properties)
     tween:Play()
     return tween
 end
 
--- Легкий Drag без спама TweenService
+-- Легкий Drag без спама памятью
 local function MakeDraggable(gui, handle, onClick)
     handle = handle or gui
     handle.Active = true
@@ -81,9 +81,10 @@ end
 function PoriedUI:CreateWindow(config)
     config = config or {}
     local TitleText = config.Name or "Poried Universal"
+    local ConfigFolder = config.ConfigFolder or "PoriedConfigs"
 
     local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "PoriedUI_Optimized"
+    ScreenGui.Name = "PoriedUI_Full"
     ScreenGui.ResetOnSpawn = false
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
@@ -93,8 +94,8 @@ function PoriedUI:CreateWindow(config)
     -- Главное окно
     local MainFrame = Instance.new("Frame")
     MainFrame.Name = "MainFrame"
-    MainFrame.Size = UDim2.new(0, 500, 0, 330)
-    MainFrame.Position = UDim2.new(0.5, -250, 0.5, -165)
+    MainFrame.Size = UDim2.new(0, 520, 0, 340)
+    MainFrame.Position = UDim2.new(0.5, -260, 0.5, -170)
     MainFrame.BackgroundColor3 = Theme.MainBackground
     MainFrame.BackgroundTransparency = Theme.MainTransparency
     MainFrame.ClipsDescendants = true
@@ -204,14 +205,14 @@ function PoriedUI:CreateWindow(config)
         windowVisible = not windowVisible
         if windowVisible then
             MainFrame.Visible = true
-            FastTween(MainFrame, 0.2, {Size = UDim2.new(0, 500, 0, 330)})
+            FastTween(MainFrame, 0.2, {Size = UDim2.new(0, 520, 0, 340)})
         else
             FastTween(MainFrame, 0.15, {Size = UDim2.new(0, 0, 0, 0)})
             task.delay(0.15, function() MainFrame.Visible = false end)
         end
     end)
 
-    -- Легкий виджет Overlay (FPS / Ping)
+    -- Overlay (FPS / Ping)
     local OverlayFrame = Instance.new("Frame")
     OverlayFrame.Name = "PoriedOverlay"
     OverlayFrame.Size = UDim2.new(0, 160, 0, 26)
@@ -240,7 +241,6 @@ function PoriedUI:CreateWindow(config)
 
     MakeDraggable(OverlayFrame, OverlayLabel)
 
-    -- Оптимизированный фоновый цикл оверлея (раз в 0.5 секунды вместо каждого кадра)
     task.spawn(function()
         local frameCount = 0
         local lastTime = os.clock()
@@ -273,12 +273,32 @@ function PoriedUI:CreateWindow(config)
         ScreenGui = ScreenGui,
         MainFrame = MainFrame,
         Tabs = {},
-        ActiveTab = nil
+        ActiveTab = nil,
+        ConfigFolder = ConfigFolder
     }
+
+    -- МЕНЕДЖЕР КОНФИГУРАЦИЙ (CONFIG MANAGER)
+    function WindowObj:SaveConfig(name, dataTable)
+        pcall(function()
+            if not isfolder(self.ConfigFolder) then makefolder(self.ConfigFolder) end
+            local json = HttpService:JSONEncode(dataTable)
+            writefile(self.ConfigFolder .. "/" .. name .. ".json", json)
+        end)
+    end
+
+    function WindowObj:LoadConfig(name)
+        local success, result = pcall(function()
+            if isfile(self.ConfigFolder .. "/" .. name .. ".json") then
+                local content = readfile(self.ConfigFolder .. "/" .. name .. ".json")
+                return HttpService:JSONDecode(content)
+            end
+        end)
+        return success and result or nil
+    end
 
     function WindowObj:CreateTab(tabName)
         local TabButton = Instance.new("TextButton")
-        TabButton.Size = UDim2.new(0, 70, 0, 26)
+        TabButton.Size = UDim2.new(0, 74, 0, 26)
         TabButton.Text = tabName
         TabButton.TextColor3 = Theme.TextDark
         TabButton.TextSize = 11
@@ -339,7 +359,7 @@ function PoriedUI:CreateWindow(config)
         local TabObj = {Scroll = TabScroll, Button = TabButton}
         table.insert(WindowObj.Tabs, TabObj)
 
-        -- СЕКЦИЯ
+        -- 1. СЕКЦИЯ (SECTION)
         function TabObj:CreateSection(text)
             local SecFrame = Instance.new("Frame")
             SecFrame.Size = UDim2.new(1, 0, 0, 20)
@@ -359,7 +379,7 @@ function PoriedUI:CreateWindow(config)
             return SecLabel
         end
 
-        -- ПЕРЕКЛЮЧАТЕЛЬ (TOGGLE)
+        -- 2. ПЕРЕКЛЮЧАТЕЛЬ (TOGGLE)
         function TabObj:CreateToggle(options)
             options = options or {}
             local Name = options.Name or "Toggle"
@@ -432,7 +452,7 @@ function PoriedUI:CreateWindow(config)
             ClickArea.Activated:Connect(ToggleState)
         end
 
-        -- СЛАЙДЕР (SLIDER)
+        -- 3. СЛАЙДЕР (SLIDER)
         function TabObj:CreateSlider(options)
             options = options or {}
             local Name = options.Name or "Slider"
@@ -535,7 +555,7 @@ function PoriedUI:CreateWindow(config)
             end)
         end
 
-        -- ВВОД ТЕКСТА (INPUT)
+        -- 4. ВВОД ТЕКСТА (INPUT)
         function TabObj:CreateInput(options)
             options = options or {}
             local Name = options.Name or "Input"
@@ -586,7 +606,7 @@ function PoriedUI:CreateWindow(config)
             return InputBox
         end
 
-        -- ВЫПАДАЮЩИЙ СПИСОК (DROPDOWN)
+        -- 5. ВЫПАДАЮЩИЙ СПИСОК (DROPDOWN)
         function TabObj:CreateDropdown(options)
             options = options or {}
             local Name = options.Name or "Dropdown"
@@ -699,7 +719,7 @@ function PoriedUI:CreateWindow(config)
             }
         end
 
-        -- КНОПКА (BUTTON)
+        -- 6. КНОПКА (BUTTON)
         function TabObj:CreateButton(options)
             options = options or {}
             local Name = options.Name or "Button"
@@ -729,6 +749,205 @@ function PoriedUI:CreateWindow(config)
             end)
 
             return BtnFrame
+        end
+
+        -- 7. НАЗНАЧЕНИЕ КЛАВИШИ (KEYBIND)
+        function TabObj:CreateKeybind(options)
+            options = options or {}
+            local Name = options.Name or "Keybind"
+            local Default = options.Default or Enum.KeyCode.E
+            local Callback = options.Callback or function() end
+            local currentKey = Default
+            local listening = false
+
+            local Frame = Instance.new("Frame")
+            Frame.Size = UDim2.new(1, 0, 0, 38)
+            Frame.BackgroundColor3 = Theme.ElementBackground
+            Frame.BackgroundTransparency = Theme.ElementTransparency
+            Frame.Parent = TabScroll
+
+            local FCorner = Instance.new("UICorner")
+            FCorner.CornerRadius = Theme.CornerRadius
+            FCorner.Parent = Frame
+
+            local Label = Instance.new("TextLabel")
+            Label.Size = UDim2.new(1, -90, 1, 0)
+            Label.Position = UDim2.new(0, 10, 0, 0)
+            Label.Text = Name
+            Label.TextColor3 = Theme.TextWhite
+            Label.TextSize = 12
+            Label.Font = FontMedium
+            Label.TextXAlignment = Enum.TextXAlignment.Left
+            Label.BackgroundTransparency = 1
+            Label.Parent = Frame
+
+            local BindBtn = Instance.new("TextButton")
+            BindBtn.Size = UDim2.new(0, 70, 0, 24)
+            BindBtn.Position = UDim2.new(1, -80, 0.5, -12)
+            BindBtn.BackgroundColor3 = Color3.fromRGB(40, 45, 55)
+            BindBtn.Text = currentKey.Name
+            BindBtn.TextColor3 = Theme.Accent
+            BindBtn.TextSize = 11
+            BindBtn.Font = FontBold
+
+            local BCorner = Instance.new("UICorner")
+            BCorner.CornerRadius = UDim.new(0, 6)
+            BCorner.Parent = BindBtn
+            BindBtn.Parent = Frame
+
+            BindBtn.Activated:Connect(function()
+                listening = true
+                BindBtn.Text = "..."
+                BindBtn.TextColor3 = Theme.TextWhite
+            end)
+
+            UserInputService.InputBegan:Connect(function(input, gpe)
+                if listening and not gpe then
+                    if input.UserInputType == Enum.UserInputType.Keyboard then
+                        currentKey = input.KeyCode
+                        BindBtn.Text = currentKey.Name
+                        BindBtn.TextColor3 = Theme.Accent
+                        listening = false
+                    end
+                elseif not listening and input.KeyCode == currentKey and not gpe then
+                    Callback(currentKey)
+                end
+            end)
+        end
+
+        -- 8. ВЫБОР ЦВЕТА (COLORPICKER / CUSTOM)
+        function TabObj:CreateColorPicker(options)
+            options = options or {}
+            local Name = options.Name or "Color Picker"
+            local Default = options.Default or Color3.fromRGB(255, 0, 0)
+            local Callback = options.Callback or function() end
+            local currentColor = Default
+            local expanded = false
+
+            local Frame = Instance.new("Frame")
+            Frame.Size = UDim2.new(1, 0, 0, 38)
+            Frame.BackgroundColor3 = Theme.ElementBackground
+            Frame.BackgroundTransparency = Theme.ElementTransparency
+            Frame.ClipsDescendants = true
+            Frame.Parent = TabScroll
+
+            local FCorner = Instance.new("UICorner")
+            FCorner.CornerRadius = Theme.CornerRadius
+            FCorner.Parent = Frame
+
+            local HeaderBtn = Instance.new("TextButton")
+            HeaderBtn.Size = UDim2.new(1, 0, 0, 38)
+            HeaderBtn.BackgroundTransparency = 1
+            HeaderBtn.Text = ""
+            HeaderBtn.Parent = Frame
+
+            local Label = Instance.new("TextLabel")
+            Label.Size = UDim2.new(0.6, 0, 0, 38)
+            Label.Position = UDim2.new(0, 10, 0, 0)
+            Label.Text = Name
+            Label.TextColor3 = Theme.TextWhite
+            Label.TextSize = 12
+            Label.Font = FontMedium
+            Label.TextXAlignment = Enum.TextXAlignment.Left
+            Label.BackgroundTransparency = 1
+            Label.Parent = HeaderBtn
+
+            local Preview = Instance.new("Frame")
+            Preview.Size = UDim2.new(0, 30, 0, 18)
+            Preview.Position = UDim2.new(1, -40, 0.5, -9)
+            Preview.BackgroundColor3 = currentColor
+
+            local PCorner = Instance.new("UICorner")
+            PCorner.CornerRadius = UDim.new(0, 4)
+            PCorner.Parent = Preview
+            Preview.Parent = HeaderBtn
+
+            -- Контейнер ползунков RGB
+            local SlidersContainer = Instance.new("Frame")
+            SlidersContainer.Size = UDim2.new(1, -20, 0, 90)
+            SlidersContainer.Position = UDim2.new(0, 10, 0, 42)
+            SlidersContainer.BackgroundTransparency = 1
+            SlidersContainer.Parent = Frame
+
+            local function CreateRGBSlider(label, initVal, yPos, onChange)
+                local val = initVal
+                local row = Instance.new("Frame")
+                row.Size = UDim2.new(1, 0, 0, 24)
+                row.Position = UDim2.new(0, 0, 0, yPos)
+                row.BackgroundTransparency = 1
+                row.Parent = SlidersContainer
+
+                local l = Instance.new("TextLabel")
+                l.Size = UDim2.new(0, 15, 1, 0)
+                l.Text = label
+                l.TextColor3 = Theme.TextWhite
+                l.TextSize = 10
+                l.Font = FontBold
+                l.BackgroundTransparency = 1
+                l.Parent = row
+
+                local track = Instance.new("Frame")
+                track.Size = UDim2.new(1, -30, 0, 4)
+                track.Position = UDim2.new(0, 25, 0.5, -2)
+                track.BackgroundColor3 = Color3.fromRGB(50, 55, 65)
+                track.Active = true
+
+                local trCorner = Instance.new("UICorner")
+                trCorner.CornerRadius = UDim.new(1, 0)
+                trCorner.Parent = track
+
+                local fill = Instance.new("Frame")
+                fill.Size = UDim2.new(val / 255, 0, 1, 0)
+                fill.BackgroundColor3 = Theme.Accent
+
+                local fCorner = Instance.new("UICorner")
+                fCorner.CornerRadius = UDim.new(1, 0)
+                fCorner.Parent = fill
+                fill.Parent = track
+                track.Parent = row
+
+                local drag = false
+                local function Update(input)
+                    local pos = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+                    val = math.floor(pos * 255)
+                    fill.Size = UDim2.new(pos, 0, 1, 0)
+                    onChange(val)
+                end
+
+                track.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                        drag = true
+                        Update(input)
+                    end
+                end)
+                UserInputService.InputChanged:Connect(function(input)
+                    if drag and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                        Update(input)
+                    end
+                end)
+                UserInputService.InputEnded:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                        drag = false
+                    end
+                end)
+            end
+
+            local r, g, b = math.floor(currentColor.R * 255), math.floor(currentColor.G * 255), math.floor(currentColor.B * 255)
+
+            local function UpdateColor()
+                currentColor = Color3.fromRGB(r, g, b)
+                Preview.BackgroundColor3 = currentColor
+                Callback(currentColor)
+            end
+
+            CreateRGBSlider("R", r, 0, function(v) r = v; UpdateColor() end)
+            CreateRGBSlider("G", g, 28, function(v) g = v; UpdateColor() end)
+            CreateRGBSlider("B", b, 56, function(v) b = v; UpdateColor() end)
+
+            HeaderBtn.Activated:Connect(function()
+                expanded = not expanded
+                FastTween(Frame, 0.15, {Size = UDim2.new(1, 0, 0, expanded and 138 or 38)})
+            end)
         end
 
         return TabObj
