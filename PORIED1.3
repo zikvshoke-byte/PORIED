@@ -1,30 +1,45 @@
--- [[ ULTRA-OPTIMIZED MOBILE UI ENGINE ]] --
+-- [[ ULTRA-OPTIMIZED MOBILE UI ENGINE (V2 PRO) ]] --
+-- Оптимизировано под слабые мобильные процессоры и Touch-интерфейс
+
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
 
 local PoriedUI = {}
 PoriedUI.__index = PoriedUI
 
--- Быстрая микро-анимация для экономии CPU
-local function FastTween(instance, properties, duration)
-    duration = duration or 0.12
-    local tween = TweenService:Create(instance, TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), properties)
+-- Кэширование стилей анимации (устраняет создание лишних объектов в памяти)
+local FastTweenInfo = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local BtnTweenInfo = TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+local function FastTween(instance, properties, customInfo)
+    local tween = TweenService:Create(instance, customInfo or FastTweenInfo, properties)
     tween:Play()
     return tween
 end
 
+-- Единый глобальный контроллер перетаскивания слайдеров (убирает микрофризы при свайпах)
+local ActiveSlider = nil
+UserInputService.InputChanged:Connect(function(input)
+    if ActiveSlider and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        ActiveSlider.Update(input.Position)
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if ActiveSlider and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+        ActiveSlider = nil
+    end
+end)
+
 function PoriedUI:CreateWindow(config)
     local WindowName = config.Name or "Mobile Menu"
-    
     local TargetParent = (gethui and gethui()) or game:GetService("CoreGui")
     
     local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "PoriedMobileUI_" .. math.random(1000, 9999)
+    ScreenGui.Name = "PoriedMobileUI_" .. tostring(math.random(1000, 9999))
     ScreenGui.ResetOnSpawn = false
     ScreenGui.IgnoreGuiInset = true
-    ScreenGui.Parent = TargetParent
 
     -- // ПЛАВАЮЩАЯ КНОПКА ОТКРЫТИЯ/ЗАКРЫТИЯ ДЛЯ ТЕЛЕФОНОВ // --
     local ToggleWidget = Instance.new("TextButton")
@@ -46,7 +61,6 @@ function PoriedUI:CreateWindow(config)
     WidgetStroke.Color = Color3.fromRGB(0, 200, 255)
     WidgetStroke.Thickness = 1.2
     WidgetStroke.Parent = ToggleWidget
-    ToggleWidget.Parent = ScreenGui
 
     -- // ГЛАВНОЕ ОКНО // --
     local MainFrame = Instance.new("Frame")
@@ -66,7 +80,6 @@ function PoriedUI:CreateWindow(config)
     MainStroke.Thickness = 1
     MainStroke.Parent = MainFrame
 
-    -- Логика скрытия по кнопке UI
     ToggleWidget.MouseButton1Click:Connect(function()
         MainFrame.Visible = not MainFrame.Visible
     end)
@@ -76,7 +89,6 @@ function PoriedUI:CreateWindow(config)
     TopBar.Size = UDim2.new(1, 0, 0, 36)
     TopBar.BackgroundColor3 = Color3.fromRGB(24, 27, 33)
     TopBar.BorderSizePixel = 0
-    TopBar.Parent = MainFrame
 
     local Title = Instance.new("TextLabel")
     Title.Size = UDim2.new(1, -50, 1, 0)
@@ -100,31 +112,30 @@ function PoriedUI:CreateWindow(config)
     CloseBtn.Parent = TopBar
     CloseBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
 
-    -- Быстрое перемещение окна для мобильных экранов
-    local dragging, dragInput, dragStart, startPos
+    -- Оптимизированный Touch-драг для окна
+    local dragging, dragStart, startPos = false, nil, nil
     TopBar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             dragStart = input.Position
             startPos = MainFrame.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
         end
     end)
-    TopBar.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
+
     UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             local delta = input.Position - dragStart
             MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
         end
     end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+
+    TopBar.Parent = MainFrame
 
     -- // САЙДБАР С ВКЛАДКАМИ // --
     local TabSidebar = Instance.new("ScrollingFrame")
@@ -134,6 +145,7 @@ function PoriedUI:CreateWindow(config)
     TabSidebar.BorderSizePixel = 0
     TabSidebar.ScrollBarThickness = 0
     TabSidebar.CanvasSize = UDim2.new(0, 0, 0, 0)
+    TabSidebar.AutomaticCanvasSize = Enum.AutomaticSize.Y
     TabSidebar.Parent = MainFrame
 
     local TabListLayout = Instance.new("UIListLayout")
@@ -141,17 +153,16 @@ function PoriedUI:CreateWindow(config)
     TabListLayout.Padding = UDim.new(0, 2)
     TabListLayout.Parent = TabSidebar
 
-    TabListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        TabSidebar.CanvasSize = UDim2.new(0, 0, 0, TabListLayout.AbsoluteContentSize.Y)
-    end)
-
     -- // КОНТЕЙНЕР КОНТЕНТА // --
     local PagesContainer = Instance.new("Frame")
     PagesContainer.Size = UDim2.new(1, -125, 1, -42)
     PagesContainer.Position = UDim2.new(0, 123, 0, 39)
     PagesContainer.BackgroundTransparency = 1
     PagesContainer.Parent = MainFrame
+
     MainFrame.Parent = ScreenGui
+    ToggleWidget.Parent = ScreenGui
+    ScreenGui.Parent = TargetParent
 
     local WindowObj = { Tabs = {}, FirstTab = nil }
 
@@ -164,7 +175,6 @@ function PoriedUI:CreateWindow(config)
         TabBtn.TextColor3 = Color3.fromRGB(150, 155, 165)
         TabBtn.TextSize = 12
         TabBtn.Font = Enum.Font.GothamMedium
-        TabBtn.Parent = TabSidebar
 
         local TabIndicator = Instance.new("Frame")
         TabIndicator.Size = UDim2.new(0, 3, 1, 0)
@@ -181,6 +191,7 @@ function PoriedUI:CreateWindow(config)
         Page.ScrollBarImageColor3 = Color3.fromRGB(50, 55, 65)
         Page.Visible = false
         Page.CanvasSize = UDim2.new(0, 0, 0, 0)
+        Page.AutomaticCanvasSize = Enum.AutomaticSize.Y
         Page.Parent = PagesContainer
 
         local PageLayout = Instance.new("UIListLayout")
@@ -188,12 +199,8 @@ function PoriedUI:CreateWindow(config)
         PageLayout.Padding = UDim.new(0, 6)
         PageLayout.Parent = Page
 
-        PageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-            Page.CanvasSize = UDim2.new(0, 0, 0, PageLayout.AbsoluteContentSize.Y + 10)
-        end)
-
         local function Select()
-            for _, otherTab in pairs(WindowObj.Tabs) do
+            for _, otherTab in ipairs(WindowObj.Tabs) do
                 otherTab.Page.Visible = false
                 otherTab.Indicator.Visible = false
                 otherTab.Button.TextColor3 = Color3.fromRGB(150, 155, 165)
@@ -206,6 +213,8 @@ function PoriedUI:CreateWindow(config)
         end
 
         TabBtn.MouseButton1Click:Connect(Select)
+        TabBtn.Parent = TabSidebar
+
         local TabItem = { Button = TabBtn, Page = Page, Indicator = TabIndicator }
         table.insert(WindowObj.Tabs, TabItem)
 
@@ -245,9 +254,9 @@ function PoriedUI:CreateWindow(config)
             Corner.Parent = Btn
 
             Btn.MouseButton1Click:Connect(function()
-                FastTween(Btn, {BackgroundColor3 = Color3.fromRGB(0, 180, 255)}, 0.08)
+                FastTween(Btn, {BackgroundColor3 = Color3.fromRGB(0, 180, 255)}, BtnTweenInfo)
                 task.delay(0.08, function()
-                    FastTween(Btn, {BackgroundColor3 = Color3.fromRGB(27, 30, 38)}, 0.12)
+                    FastTween(Btn, {BackgroundColor3 = Color3.fromRGB(27, 30, 38)}, FastTweenInfo)
                 end)
                 if cfg.Callback then cfg.Callback() end
             end)
@@ -309,7 +318,7 @@ function PoriedUI:CreateWindow(config)
             ToggleFrame.Parent = Page
         end
 
-        -- // СЛАЙДЕР // --
+        -- // СЛАЙДЕР (УЛЬТРА-ПЛАВНЫЙ С КЭШИРОВАНИЕМ ДЛЯ ТЕЛЕФОНОВ) // --
         function TabMethods:CreateSlider(cfg)
             local Min = cfg.Min or 0
             local Max = cfg.Max or 100
@@ -369,28 +378,26 @@ function PoriedUI:CreateWindow(config)
             Fill.Parent = Track
             Track.Parent = SliderFrame
 
+            -- Кэшированные размеры трека во время свайпа (защита от лагов)
+            local cachedTrackPos = 0
+            local cachedTrackSize = 1
+
             local function UpdateSlider(inputPos)
-                local percent = math.clamp((inputPos.X - Track.AbsolutePosition.X) / Track.AbsoluteSize.X, 0, 1)
-                Value = math.floor(Min + (Max - Min) * percent)
+                local percent = math.clamp((inputPos.X - cachedTrackPos) / cachedTrackSize, 0, 1)
+                local newVal = math.floor(Min + (Max - Min) * percent)
+                if newVal ~= Value then
+                    Value = newVal
+                    ValueLabel.Text = tostring(Value)
+                    if cfg.Callback then cfg.Callback(Value) end
+                end
                 Fill.Size = UDim2.new(percent, 0, 1, 0)
-                ValueLabel.Text = tostring(Value)
-                if cfg.Callback then cfg.Callback(Value) end
             end
 
-            local sliding = false
             Track.InputBegan:Connect(function(input)
                 if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                    sliding = true
-                    UpdateSlider(input.Position)
-                end
-            end)
-            UserInputService.InputEnded:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                    sliding = false
-                end
-            end)
-            UserInputService.InputChanged:Connect(function(input)
-                if sliding and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                    cachedTrackPos = Track.AbsolutePosition.X
+                    cachedTrackSize = math.max(Track.AbsoluteSize.X, 1)
+                    ActiveSlider = { Update = UpdateSlider }
                     UpdateSlider(input.Position)
                 end
             end)
