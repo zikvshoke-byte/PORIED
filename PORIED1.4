@@ -1,5 +1,5 @@
--- [[ PORIED UI FRAMEWORK V9 - FIXED THEMES, SLIDERS, BINDS & LOCALIZATION (MOBILE OPTIMIZED) ]] --
--- Style: Soft Dark Glass | Accent: Multi-Theme | Touch Native
+-- [[ PORIED UI FRAMEWORK V9.5 - PERFECTED MOBILE & FULL PERSISTENCE EDITION ]] --
+-- Style: Soft Dark Glass | Accent: Multi-Theme | Touch Native | 100% Backwards Compatible
 
 local PoriedUI = {}
 PoriedUI.__index = PoriedUI
@@ -12,15 +12,6 @@ local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local LocalPlayer = Players.LocalPlayer
-
--- Кэширование файловых функций
-local isfolder = isfolder or function() return false end
-local makefolder = makefolder or function() end
-local isfile = isfile or function() return false end
-local readfile = readfile or function() return nil end
-local writefile = writefile or function() end
-local delfile = delfile or function() end
-local listfiles = listfiles or function() return {} end
 
 -- Локализация (EN / RU)
 local Translations = {
@@ -36,10 +27,13 @@ local Translations = {
         SaveConfigBtn = "Save Current Config",
         LoadConfigBtn = "Load Selected Config",
         DeleteConfigBtn = "Delete Selected Config",
+        AutoLoadToggle = "Auto-Load Selected Config",
         QuickActionBinds = "Quick Action Binds",
         SelectFeature = "Select Feature",
         ButtonLabel = "Button Label (3 Letters)",
         CreateBindBtn = "Create Quick-Bind Button",
+        RemoveLastBindBtn = "Remove Last Quick-Bind",
+        ClearBindsBtn = "Clear All Quick-Binds",
         FPSCounter = "FPS Counter",
         PingMonitor = "Ping Monitor",
         PlayerName = "Player Name"
@@ -56,10 +50,13 @@ local Translations = {
         SaveConfigBtn = "Сохранить Текущий Конфиг",
         LoadConfigBtn = "Загрузить Выбранный",
         DeleteConfigBtn = "Удалить Выбранный",
+        AutoLoadToggle = "Авто-Загрузка Выбранного",
         QuickActionBinds = "Быстрые Бинды",
         SelectFeature = "Выберите Функцию",
         ButtonLabel = "Текст Кнопки (3 Буквы)",
         CreateBindBtn = "Создать Кнопку Бинда",
+        RemoveLastBindBtn = "Удалить Последний Бинд",
+        ClearBindsBtn = "Очистить Все Бинды",
         FPSCounter = "Счетчик FPS",
         PingMonitor = "Монитор Пинга",
         PlayerName = "Имя Игрока"
@@ -67,8 +64,30 @@ local Translations = {
 }
 
 local CurrentLang = "EN"
+local CurrentFontName = "Gotham"
 local CurrentFontMedium = Enum.Font.GothamMedium
 local CurrentFontBold = Enum.Font.GothamBold
+
+local function ApplyFontByName(fontName)
+    CurrentFontName = fontName or "Gotham"
+    if CurrentFontName == "SourceSans" then
+        CurrentFontMedium = Enum.Font.SourceSans
+        CurrentFontBold = Enum.Font.SourceSansBold
+    elseif CurrentFontName == "RobotoMono" then
+        CurrentFontMedium = Enum.Font.RobotoMono
+        CurrentFontBold = Enum.Font.RobotoMono
+    elseif CurrentFontName == "Ubuntu" then
+        CurrentFontMedium = Enum.Font.Ubuntu
+        CurrentFontBold = Enum.Font.Ubuntu
+    elseif CurrentFontName == "FredokaOne" then
+        CurrentFontMedium = Enum.Font.FredokaOne
+        CurrentFontBold = Enum.Font.FredokaOne
+    else
+        CurrentFontName = "Gotham"
+        CurrentFontMedium = Enum.Font.GothamMedium
+        CurrentFontBold = Enum.Font.GothamBold
+    end
+end
 
 local Theme = {
     MainBackground = Color3.fromRGB(18, 20, 25),
@@ -84,6 +103,47 @@ local Theme = {
     CornerRadius = UDim.new(0, 12)
 }
 
+-- Безопасная работа с файлами
+local function EnsureConfigFolder()
+    pcall(function()
+        if isfolder and not isfolder("poried_configs") then
+            makefolder("poried_configs")
+        end
+    end)
+end
+
+local function SaveJSON(fileName, dataTable)
+    pcall(function()
+        EnsureConfigFolder()
+        if writefile then
+            writefile("poried_configs/" .. fileName, HttpService:JSONEncode(dataTable))
+        end
+    end)
+end
+
+local function LoadJSON(fileName)
+    local result = nil
+    pcall(function()
+        if readfile and isfile and isfile("poried_configs/" .. fileName) then
+            result = HttpService:JSONDecode(readfile("poried_configs/" .. fileName))
+        end
+    end)
+    return result
+end
+
+-- Предзагрузка языка и шрифта ДО создания интерфейса
+do
+    local langData = LoadJSON("poried_lang.json")
+    if langData and (langData.Lang == "RU" or langData.Lang == "EN") then
+        CurrentLang = langData.Lang
+    end
+
+    local fontData = LoadJSON("poried_font.json")
+    if fontData and fontData.FontName then
+        ApplyFontByName(fontData.FontName)
+    end
+end
+
 local function Tween(instance, duration, properties)
     local info = TweenInfo.new(duration, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
     local tween = TweenService:Create(instance, info, properties)
@@ -91,27 +151,29 @@ local function Tween(instance, duration, properties)
     return tween
 end
 
--- Оптимизированный драг без спама TweenService
+-- Улучшенный Mobile Drag (через глобальный UserInputService, чтобы палец никогда не срывался)
 local function MakeDraggableAndClickable(gui, handle, onClick, onDragEnd)
     handle = handle or gui
     handle.Active = true
     gui.Active = true
-    
+
     local dragging = false
+    local dragInput = nil
     local dragStart, startPos
     local moved = false
 
     handle.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
+            dragInput = input
             moved = false
             dragStart = input.Position
             startPos = gui.Position
         end
     end)
 
-    handle.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input == dragInput then
             local delta = input.Position - dragStart
             if delta.Magnitude > 6 then
                 moved = true
@@ -120,54 +182,126 @@ local function MakeDraggableAndClickable(gui, handle, onClick, onDragEnd)
         end
     end)
 
-    handle.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            if dragging then
-                dragging = false
-                if not moved and onClick then
-                    onClick()
-                elseif moved and onDragEnd then
-                    onDragEnd()
-                end
+    UserInputService.InputEnded:Connect(function(input)
+        if dragging and input == dragInput then
+            dragging = false
+            dragInput = nil
+            if not moved and onClick then
+                onClick()
+            elseif moved and onDragEnd then
+                onDragEnd()
             end
         end
     end)
 end
 
-local function MakeDraggable(gui, handle)
-    MakeDraggableAndClickable(gui, handle, nil, nil)
+local function MakeDraggable(gui, handle, onDragEnd)
+    MakeDraggableAndClickable(gui, handle, nil, onDragEnd)
 end
 
 function PoriedUI:CreateWindow(config)
     config = config or {}
     local TitleText = config.Name or "Poried Universal"
 
+    -- Загрузка сохранённого состояния расположения элементов и оверлея
+    local UIState = LoadJSON("poried_ui_state.json") or {
+        Overlay = { Enabled = true, ShowFPS = true, ShowPing = true, ShowName = true, ScaleX = 0, OffsetX = 15, ScaleY = 0, OffsetY = 15 },
+        FloatBtn = { ScaleX = 0.05, OffsetX = 0, ScaleY = 0.15, OffsetY = 0 },
+        MainWin = { ScaleX = 0.5, OffsetX = -260, ScaleY = 0.5, OffsetY = -170 },
+        AutoLoadConfig = ""
+    }
+
+    local function SaveUIState()
+        SaveJSON("poried_ui_state.json", UIState)
+    end
+
     local ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = "PoriedUI_" .. math.random(1000, 9999)
     ScreenGui.ResetOnSpawn = false
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    
-    pcall(function() ScreenGui.Parent = CoreGui end)
+
+    pcall(function() ScreenGui.Parent = (gethui and gethui()) or CoreGui end)
     if not ScreenGui.Parent then ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+
+    -- Реестры для живого обновления шрифтов, цветов и локализации
+    local FontRegistry = {}
+    local function RegisterFont(inst, isBold)
+        inst.Font = isBold and CurrentFontBold or CurrentFontMedium
+        table.insert(FontRegistry, { Instance = inst, IsBold = isBold })
+    end
+
+    local AccentTextRegistry = {}
+    local function RegisterAccentText(inst)
+        inst.TextColor3 = Theme.Accent
+        table.insert(AccentTextRegistry, inst)
+    end
+
+    local TranslatableRegistry = {}
+    local function RegisterTranslatable(inst, key, prefix, isUpper)
+        local function UpdateText()
+            local t = Translations[CurrentLang][key] or key
+            if isUpper then t = t:upper() end
+            inst.Text = (prefix or "") .. t
+        end
+        UpdateText()
+        table.insert(TranslatableRegistry, UpdateText)
+    end
+
+    -- Всплывающие уведомления (Toast) внутри меню
+    local ToastFrame = Instance.new("Frame")
+    ToastFrame.Size = UDim2.new(0, 220, 0, 34)
+    ToastFrame.Position = UDim2.new(0.5, -110, 1, 50)
+    ToastFrame.BackgroundColor3 = Theme.MainBackground
+    ToastFrame.BackgroundTransparency = 0.15
+    ToastFrame.ZIndex = 100
+    ToastFrame.Parent = ScreenGui
+    Instance.new("UICorner", ToastFrame).CornerRadius = UDim.new(1, 0)
+
+    local ToastStroke = Instance.new("UIStroke", ToastFrame)
+    ToastStroke.Color = Theme.Accent
+    ToastStroke.Thickness = 1.5
+
+    local ToastLabel = Instance.new("TextLabel")
+    ToastLabel.Size = UDim2.new(1, -20, 1, 0)
+    ToastLabel.Position = UDim2.new(0, 10, 0, 0)
+    ToastLabel.BackgroundTransparency = 1
+    ToastLabel.TextColor3 = Theme.TextWhite
+    ToastLabel.TextSize = 12
+    ToastLabel.ZIndex = 101
+    RegisterFont(ToastLabel, true)
+    ToastLabel.Parent = ToastFrame
+
+    local toastToken = 0
+    local function ShowToast(msg)
+        toastToken = toastToken + 1
+        local myToken = toastToken
+        ToastLabel.Text = msg
+        local width = math.max(160, ToastLabel.TextBounds.X + 36)
+        ToastFrame.Size = UDim2.new(0, width, 0, 32)
+        Tween(ToastFrame, 0.25, { Position = UDim2.new(0.5, -width / 2, 1, -48) })
+        task.delay(2, function()
+            if toastToken == myToken then
+                Tween(ToastFrame, 0.25, { Position = UDim2.new(0.5, -width / 2, 1, 50) })
+            end
+        end)
+    end
 
     -- Главное окно
     local MainFrame = Instance.new("Frame")
     MainFrame.Name = "MainFrame"
     MainFrame.Size = UDim2.new(0, 520, 0, 340)
-    MainFrame.Position = UDim2.new(0.5, -260, 0.5, -170)
+    MainFrame.Position = UDim2.new(UIState.MainWin.ScaleX, UIState.MainWin.OffsetX, UIState.MainWin.ScaleY, UIState.MainWin.OffsetY)
     MainFrame.BackgroundColor3 = Theme.MainBackground
     MainFrame.BackgroundTransparency = Theme.MainTransparency
     MainFrame.ClipsDescendants = true
+    MainFrame.Parent = ScreenGui
 
-    local MainCorner = Instance.new("UICorner")
-    MainCorner.CornerRadius = Theme.CornerRadius
-    MainCorner.Parent = MainFrame
+    Instance.new("UICorner", MainFrame).CornerRadius = Theme.CornerRadius
 
-    local MainStroke = Instance.new("UIStroke")
+    local MainStroke = Instance.new("UIStroke", MainFrame)
     MainStroke.Color = Theme.GlassStroke
     MainStroke.Transparency = Theme.GlassStrokeTransparency
     MainStroke.Thickness = 1.2
-    MainStroke.Parent = MainFrame
 
     -- Шапка
     local TopBar = Instance.new("Frame")
@@ -176,27 +310,34 @@ function PoriedUI:CreateWindow(config)
     TopBar.BackgroundTransparency = 1
     TopBar.Parent = MainFrame
 
-    MakeDraggable(MainFrame, TopBar)
+    MakeDraggable(MainFrame, TopBar, function()
+        UIState.MainWin.ScaleX = MainFrame.Position.X.Scale
+        UIState.MainWin.OffsetX = MainFrame.Position.X.Offset
+        UIState.MainWin.ScaleY = MainFrame.Position.Y.Scale
+        UIState.MainWin.OffsetY = MainFrame.Position.Y.Offset
+        SaveUIState()
+    end)
 
     local Title = Instance.new("TextLabel")
-    Title.Size = UDim2.new(0, 150, 1, 0)
+    Title.Size = UDim2.new(0, 145, 1, 0)
     Title.Position = UDim2.new(0, 15, 0, 0)
     Title.Text = TitleText
     Title.TextColor3 = Theme.TextWhite
     Title.TextSize = 15
-    Title.Font = CurrentFontBold
+    RegisterFont(Title, true)
     Title.TextXAlignment = Enum.TextXAlignment.Left
     Title.BackgroundTransparency = 1
     Title.Parent = TopBar
 
     local TabBarScroller = Instance.new("ScrollingFrame")
     TabBarScroller.Name = "TabBarScroller"
-    TabBarScroller.Size = UDim2.new(1, -210, 1, 0)
+    TabBarScroller.Size = UDim2.new(1, -205, 1, 0)
     TabBarScroller.Position = UDim2.new(0, 160, 0, 0)
     TabBarScroller.BackgroundTransparency = 1
-    TabBarScroller.ScrollBarThickness = 0
+    TabBarScroller.ScrollBarThickness = 2
+    TabBarScroller.ScrollBarImageColor3 = Theme.Accent
+    TabBarScroller.ScrollingDirection = Enum.ScrollingDirection.X
     TabBarScroller.CanvasSize = UDim2.new(0, 0, 0, 0)
-    TabBarScroller.AutomaticCanvasSize = Enum.AutomaticSize.X
     TabBarScroller.Parent = TopBar
 
     local TabListLayout = Instance.new("UIListLayout")
@@ -206,25 +347,38 @@ function PoriedUI:CreateWindow(config)
     TabListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
     TabListLayout.Parent = TabBarScroller
 
+    TabListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        TabBarScroller.CanvasSize = UDim2.new(0, TabListLayout.AbsoluteContentSize.X + 12, 0, 0)
+    end)
+
+    local windowVisible = true
+    local function ToggleWindowVisibility()
+        windowVisible = not windowVisible
+        if windowVisible then
+            MainFrame.Visible = true
+            Tween(MainFrame, 0.25, {Size = UDim2.new(0, 520, 0, 340)})
+        else
+            Tween(MainFrame, 0.2, {Size = UDim2.new(0, 0, 0, 0)})
+            task.delay(0.2, function()
+                if not windowVisible then MainFrame.Visible = false end
+            end)
+        end
+    end
+
+    -- Кнопка "X" теперь аккуратно сворачивает окно вместо удаления GUI
     local CloseBtn = Instance.new("TextButton")
     CloseBtn.Size = UDim2.new(0, 26, 0, 26)
     CloseBtn.Position = UDim2.new(1, -34, 0.5, -13)
     CloseBtn.Text = "X"
     CloseBtn.TextColor3 = Theme.TextWhite
     CloseBtn.TextSize = 12
-    CloseBtn.Font = CurrentFontBold
+    RegisterFont(CloseBtn, true)
     CloseBtn.BackgroundColor3 = Theme.ElementBackground
     CloseBtn.BackgroundTransparency = 0.3
-
-    local CloseCorner = Instance.new("UICorner")
-    CloseCorner.CornerRadius = UDim.new(1, 0)
-    CloseCorner.Parent = CloseBtn
     CloseBtn.Parent = TopBar
-    
-    CloseBtn.Activated:Connect(function()
-        Tween(MainFrame, 0.2, {Size = UDim2.new(0, 0, 0, 0)})
-        task.delay(0.2, function() ScreenGui:Destroy() end)
-    end)
+
+    Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(1, 0)
+    CloseBtn.Activated:Connect(ToggleWindowVisibility)
 
     local ContentContainer = Instance.new("Frame")
     ContentContainer.Name = "ContentContainer"
@@ -234,93 +388,79 @@ function PoriedUI:CreateWindow(config)
     ContentContainer.ClipsDescendants = true
     ContentContainer.Parent = MainFrame
 
-    MainFrame.Parent = ScreenGui
-
-    -- Кнопка PORIED
+    -- Плавающая кнопка PORIED
     local PoriedButton = Instance.new("Frame")
     PoriedButton.Name = "PoriedFloatButton"
     PoriedButton.Size = UDim2.new(0, 85, 0, 34)
-    PoriedButton.Position = UDim2.new(0.05, 0, 0.15, 0)
+    PoriedButton.Position = UDim2.new(UIState.FloatBtn.ScaleX, UIState.FloatBtn.OffsetX, UIState.FloatBtn.ScaleY, UIState.FloatBtn.OffsetY)
     PoriedButton.BackgroundColor3 = Theme.MainBackground
     PoriedButton.BackgroundTransparency = 0.2
+    PoriedButton.Parent = ScreenGui
 
-    local PCorner = Instance.new("UICorner")
-    PCorner.CornerRadius = UDim.new(1, 0)
-    PCorner.Parent = PoriedButton
+    Instance.new("UICorner", PoriedButton).CornerRadius = UDim.new(1, 0)
 
-    local PStroke = Instance.new("UIStroke")
+    local PStroke = Instance.new("UIStroke", PoriedButton)
     PStroke.Color = Theme.Accent
     PStroke.Thickness = 1.5
-    PStroke.Parent = PoriedButton
 
     local PText = Instance.new("TextLabel")
     PText.Size = UDim2.new(1, 0, 1, 0)
     PText.BackgroundTransparency = 1
     PText.Text = "PORIED"
-    PText.TextColor3 = Theme.Accent
+    RegisterAccentText(PText)
     PText.TextSize = 12
-    PText.Font = CurrentFontBold
+    RegisterFont(PText, true)
     PText.Parent = PoriedButton
-    PoriedButton.Parent = ScreenGui
 
-    local windowVisible = true
-
-    MakeDraggableAndClickable(PoriedButton, PText, function()
-        windowVisible = not windowVisible
-        if windowVisible then
-            MainFrame.Visible = true
-            Tween(MainFrame, 0.25, {Size = UDim2.new(0, 520, 0, 340)})
-        else
-            Tween(MainFrame, 0.2, {Size = UDim2.new(0, 0, 0, 0)})
-            task.delay(0.2, function() MainFrame.Visible = false end)
-        end
-    end, nil)
+    MakeDraggableAndClickable(PoriedButton, PText, ToggleWindowVisibility, function()
+        UIState.FloatBtn.ScaleX = PoriedButton.Position.X.Scale
+        UIState.FloatBtn.OffsetX = PoriedButton.Position.X.Offset
+        UIState.FloatBtn.ScaleY = PoriedButton.Position.Y.Scale
+        UIState.FloatBtn.OffsetY = PoriedButton.Position.Y.Offset
+        SaveUIState()
+    end)
 
     -- // КАПСУЛЬНЫЙ ОВЕРЛЕЙ // --
+    local OverlaySettings = UIState.Overlay
+
     local OverlayFrame = Instance.new("Frame")
     OverlayFrame.Name = "PoriedOverlay"
     OverlayFrame.Size = UDim2.new(0, 200, 0, 30)
-    OverlayFrame.Position = UDim2.new(0, 15, 0, 15)
+    OverlayFrame.Position = UDim2.new(OverlaySettings.ScaleX or 0, OverlaySettings.OffsetX or 15, OverlaySettings.ScaleY or 0, OverlaySettings.OffsetY or 15)
     OverlayFrame.BackgroundColor3 = Theme.MainBackground
     OverlayFrame.BackgroundTransparency = 0.2
+    OverlayFrame.Parent = ScreenGui
 
-    local OverlayCorner = Instance.new("UICorner")
-    OverlayCorner.CornerRadius = UDim.new(1, 0)
-    OverlayCorner.Parent = OverlayFrame
+    Instance.new("UICorner", OverlayFrame).CornerRadius = UDim.new(1, 0)
 
-    local OverlayStroke = Instance.new("UIStroke")
+    local OverlayStroke = Instance.new("UIStroke", OverlayFrame)
     OverlayStroke.Color = Theme.Accent
     OverlayStroke.Thickness = 1.5
-    OverlayStroke.Parent = OverlayFrame
 
     local OverlayLabel = Instance.new("TextLabel")
     OverlayLabel.Size = UDim2.new(1, 0, 1, 0)
     OverlayLabel.BackgroundTransparency = 1
     OverlayLabel.TextColor3 = Theme.TextWhite
     OverlayLabel.TextSize = 11
-    OverlayLabel.Font = CurrentFontBold
+    RegisterFont(OverlayLabel, true)
     OverlayLabel.TextXAlignment = Enum.TextXAlignment.Center
     OverlayLabel.Parent = OverlayFrame
-    OverlayFrame.Parent = ScreenGui
 
-    MakeDraggable(OverlayFrame)
-
-    local OverlaySettings = {
-        Enabled = true,
-        ShowFPS = true,
-        ShowPing = true,
-        ShowName = true
-    }
+    MakeDraggable(OverlayFrame, OverlayFrame, function()
+        OverlaySettings.ScaleX = OverlayFrame.Position.X.Scale
+        OverlaySettings.OffsetX = OverlayFrame.Position.X.Offset
+        OverlaySettings.ScaleY = OverlayFrame.Position.Y.Scale
+        OverlaySettings.OffsetY = OverlayFrame.Position.Y.Offset
+        SaveUIState()
+    end)
 
     local fps = 60
     local frameCount = 0
     local lastFpsUpdate = tick()
 
-    -- Оптимизированный цикл оверлея: тяжелые строковые и пинг-вычисления делаются раз в 0.5с
     RunService.RenderStepped:Connect(function()
         frameCount = frameCount + 1
         local now = tick()
-        
         if now - lastFpsUpdate >= 0.5 then
             fps = math.floor(frameCount / (now - lastFpsUpdate))
             frameCount = 0
@@ -374,12 +514,13 @@ function PoriedUI:CreateWindow(config)
         OverlaySettings = OverlaySettings,
         CustomTabCreated = false,
         ConfigTabCreated = false,
-        BindsTabCreated = false
+        BindsTabCreated = false,
+        Notify = ShowToast
     }
 
-    -- Динамическое обновление темы
+    -- Динамическое обновление темы (с оптимизированной радугой)
     local RainbowConnection = nil
-    local function SetThemeColor(color, isRainbow)
+    local function SetThemeColor(color, isRainbow, themeName)
         if RainbowConnection then
             RainbowConnection:Disconnect()
             RainbowConnection = nil
@@ -388,10 +529,16 @@ function PoriedUI:CreateWindow(config)
         local function ApplyColor(col)
             Theme.Accent = col
             PStroke.Color = col
-            PText.TextColor3 = col
             OverlayStroke.Color = col
+            ToastStroke.Color = col
+            TabBarScroller.ScrollBarImageColor3 = col
+
+            for _, txt in ipairs(AccentTextRegistry) do
+                if txt and txt.Parent then txt.TextColor3 = col end
+            end
 
             for _, t in pairs(WindowObj.Tabs) do
+                t.Scroll.ScrollBarImageColor3 = col
                 if t.Scroll.Visible then
                     t.Button.BackgroundColor3 = col
                     t.Stroke.Color = col
@@ -403,9 +550,7 @@ function PoriedUI:CreateWindow(config)
             end
 
             for _, toggle in ipairs(WindowObj.RegisteredToggles) do
-                if toggle.GetState() then
-                    toggle.UpdateColor(col)
-                end
+                toggle.UpdateColor(col)
             end
 
             for _, slider in ipairs(WindowObj.RegisteredSliders) do
@@ -415,15 +560,19 @@ function PoriedUI:CreateWindow(config)
             for _, bindBtn in ipairs(WindowObj.RegisteredBinds) do
                 bindBtn.UpdateColor(col)
             end
+
+            if WindowObj.RefreshThemeButtons then
+                WindowObj.RefreshThemeButtons()
+            end
         end
 
         if isRainbow then
-            local lastHueUpdate = 0
+            local lastRainbowTick = 0
             RainbowConnection = RunService.RenderStepped:Connect(function()
                 local now = tick()
-                if now - lastHueUpdate >= 0.03 then -- Троттлинг 33 FPS для радуги снижает нагрузку на 70%
-                    lastHueUpdate = now
-                    local hue = (now % 4) / 4
+                if now - lastRainbowTick >= 0.04 then
+                    lastRainbowTick = now
+                    local hue = (now % 5) / 5
                     ApplyColor(Color3.fromHSV(hue, 0.85, 1))
                 end
             end)
@@ -431,49 +580,51 @@ function PoriedUI:CreateWindow(config)
             ApplyColor(color)
         end
 
-        pcall(function()
-            if not isfolder("poried_configs") then makefolder("poried_configs") end
-            local themeData = { IsRainbow = isRainbow, R = color and color.R or 0, G = color and color.G or 0, B = color and color.B or 0 }
-            writefile("poried_configs/poried_theme.json", HttpService:JSONEncode(themeData))
-        end)
+        SaveJSON("poried_theme.json", {
+            ThemeName = themeName or "Custom",
+            IsRainbow = isRainbow or false,
+            R = color.R,
+            G = color.G,
+            B = color.B
+        })
     end
 
-    -- Загрузка темы при старте
-    pcall(function()
-        if isfile("poried_configs/poried_theme.json") then
-            local data = HttpService:JSONDecode(readfile("poried_configs/poried_theme.json"))
-            if data then
-                if data.IsRainbow then
-                    SetThemeColor(Theme.Accent, true)
-                elseif data.R and data.G and data.B then
-                    SetThemeColor(Color3.new(data.R, data.G, data.B), false)
-                end
+    -- Загрузка сохранённой темы при старте
+    do
+        local themeData = LoadJSON("poried_theme.json")
+        if themeData then
+            if themeData.IsRainbow then
+                SetThemeColor(Theme.Accent, true, "RGB Rainbow")
+            elseif themeData.R and themeData.G and themeData.B then
+                SetThemeColor(Color3.new(themeData.R, themeData.G, themeData.B), false, themeData.ThemeName)
             end
         end
-    end)
+    end
 
     function WindowObj:CreateTab(tabName, isSpecialOrder)
         local TabButton = Instance.new("TextButton")
         TabButton.Size = UDim2.new(0, 75, 0, 28)
+        TabButton.AutomaticSize = Enum.AutomaticSize.X
         TabButton.Text = tabName
         TabButton.TextColor3 = Theme.TextDark
         TabButton.TextSize = 12
-        TabButton.Font = CurrentFontMedium
+        RegisterFont(TabButton, false)
         TabButton.TextStrokeTransparency = 0.4
         TabButton.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
         TabButton.BackgroundColor3 = Theme.ElementBackground
         TabButton.BackgroundTransparency = 0.5
         TabButton.LayoutOrder = isSpecialOrder or #WindowObj.Tabs + 1
+        TabButton.Parent = TabBarScroller
 
-        local TabBtnCorner = Instance.new("UICorner")
-        TabBtnCorner.CornerRadius = UDim.new(0, 8)
-        TabBtnCorner.Parent = TabButton
+        local BtnPad = Instance.new("UIPadding", TabButton)
+        BtnPad.PaddingLeft = UDim.new(0, 10)
+        BtnPad.PaddingRight = UDim.new(0, 10)
 
-        local TabStroke = Instance.new("UIStroke")
+        Instance.new("UICorner", TabButton).CornerRadius = UDim.new(0, 8)
+
+        local TabStroke = Instance.new("UIStroke", TabButton)
         TabStroke.Color = Theme.GlassStroke
         TabStroke.Transparency = 1
-        TabStroke.Parent = TabButton
-        TabButton.Parent = TabBarScroller
 
         local TabScroll = Instance.new("ScrollingFrame")
         TabScroll.Name = "TabScroll_" .. tabName
@@ -482,7 +633,7 @@ function PoriedUI:CreateWindow(config)
         TabScroll.ScrollBarThickness = 3
         TabScroll.ScrollBarImageColor3 = Theme.Accent
         TabScroll.Visible = false
-        TabScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        TabScroll.Parent = ContentContainer
 
         local ScrollLayout = Instance.new("UIListLayout")
         ScrollLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -495,7 +646,10 @@ function PoriedUI:CreateWindow(config)
         ScrollPadding.PaddingLeft = UDim.new(0, 4)
         ScrollPadding.PaddingRight = UDim.new(0, 8)
         ScrollPadding.Parent = TabScroll
-        TabScroll.Parent = ContentContainer
+
+        ScrollLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+            TabScroll.CanvasSize = UDim2.new(0, 0, 0, ScrollLayout.AbsoluteContentSize.Y + 15)
+        end)
 
         local function ActivateTab()
             for _, t in pairs(WindowObj.Tabs) do
@@ -523,17 +677,17 @@ function PoriedUI:CreateWindow(config)
             local SecFrame = Instance.new("Frame")
             SecFrame.Size = UDim2.new(1, 0, 0, 22)
             SecFrame.BackgroundTransparency = 1
+            SecFrame.Parent = TabScroll
 
             local SecLabel = Instance.new("TextLabel")
             SecLabel.Size = UDim2.new(1, 0, 1, 0)
             SecLabel.Text = text:upper()
             SecLabel.TextColor3 = Theme.Accent
             SecLabel.TextSize = 11
-            SecLabel.Font = CurrentFontBold
+            RegisterFont(SecLabel, true)
             SecLabel.TextXAlignment = Enum.TextXAlignment.Left
             SecLabel.BackgroundTransparency = 1
             SecLabel.Parent = SecFrame
-            SecFrame.Parent = TabScroll
 
             table.insert(WindowObj.RegisteredSections, SecLabel)
             return SecLabel
@@ -550,15 +704,12 @@ function PoriedUI:CreateWindow(config)
             Frame.Size = UDim2.new(1, 0, 0, 42)
             Frame.BackgroundColor3 = Theme.ElementBackground
             Frame.BackgroundTransparency = Theme.ElementTransparency
+            Frame.Parent = TabScroll
 
-            local FCorner = Instance.new("UICorner")
-            FCorner.CornerRadius = Theme.CornerRadius
-            FCorner.Parent = Frame
-
-            local Stroke = Instance.new("UIStroke")
+            Instance.new("UICorner", Frame).CornerRadius = Theme.CornerRadius
+            local Stroke = Instance.new("UIStroke", Frame)
             Stroke.Color = Theme.GlassStroke
             Stroke.Transparency = Theme.GlassStrokeTransparency
-            Stroke.Parent = Frame
 
             local Label = Instance.new("TextLabel")
             Label.Size = UDim2.new(1, -65, 1, 0)
@@ -566,7 +717,7 @@ function PoriedUI:CreateWindow(config)
             Label.Text = Name
             Label.TextColor3 = Theme.TextWhite
             Label.TextSize = 13
-            Label.Font = CurrentFontMedium
+            RegisterFont(Label, false)
             Label.TextXAlignment = Enum.TextXAlignment.Left
             Label.BackgroundTransparency = 1
             Label.Parent = Frame
@@ -577,21 +728,17 @@ function PoriedUI:CreateWindow(config)
             SwitchBg.BackgroundColor3 = state and Theme.Accent or Color3.fromRGB(50, 55, 65)
             SwitchBg.Text = ""
             SwitchBg.AutoButtonColor = false
+            SwitchBg.Parent = Frame
 
-            local SwitchCorner = Instance.new("UICorner")
-            SwitchCorner.CornerRadius = UDim.new(1, 0)
-            SwitchCorner.Parent = SwitchBg
+            Instance.new("UICorner", SwitchBg).CornerRadius = UDim.new(1, 0)
 
             local Knob = Instance.new("Frame")
             Knob.Size = UDim2.new(0, 18, 0, 18)
             Knob.Position = state and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
             Knob.BackgroundColor3 = Theme.TextWhite
-
-            local KnobCorner = Instance.new("UICorner")
-            KnobCorner.CornerRadius = UDim.new(1, 0)
-            KnobCorner.Parent = Knob
             Knob.Parent = SwitchBg
-            SwitchBg.Parent = Frame
+
+            Instance.new("UICorner", Knob).CornerRadius = UDim.new(1, 0)
 
             local function SetToggleState(newState)
                 state = newState
@@ -602,6 +749,12 @@ function PoriedUI:CreateWindow(config)
                     Tween(SwitchBg, 0.2, {BackgroundColor3 = Color3.fromRGB(50, 55, 65)})
                     Tween(Knob, 0.2, {Position = UDim2.new(0, 2, 0.5, -9)})
                 end
+                -- Двусторонняя синхронизация с быстрыми кнопками на экране
+                for _, bindBtn in ipairs(WindowObj.RegisteredBinds) do
+                    if bindBtn.ToggleName == Name and bindBtn.SyncState then
+                        bindBtn.SyncState(state)
+                    end
+                end
                 Callback(state)
             end
 
@@ -610,7 +763,7 @@ function PoriedUI:CreateWindow(config)
             end
 
             SwitchBg.Activated:Connect(ToggleState)
-            
+
             local ClickArea = Instance.new("TextButton")
             ClickArea.Size = UDim2.new(1, -60, 1, 0)
             ClickArea.BackgroundTransparency = 1
@@ -618,25 +771,27 @@ function PoriedUI:CreateWindow(config)
             ClickArea.Parent = Frame
             ClickArea.Activated:Connect(ToggleState)
 
-            Frame.Parent = TabScroll
-
             local toggleObj = {
                 Name = Name,
+                LabelInstance = Label,
                 GetState = function() return state end,
                 SetState = SetToggleState,
                 Toggle = ToggleState,
-                UpdateColor = function(col) if state then SwitchBg.BackgroundColor3 = col end end
+                UpdateColor = function(col)
+                    if state then SwitchBg.BackgroundColor3 = col end
+                end
             }
 
             table.insert(WindowObj.RegisteredToggles, toggleObj)
             table.insert(WindowObj.RegisteredToggleNames, Name)
-            
+
             if WindowObj.OnToggleAdded then
                 WindowObj.OnToggleAdded(Name)
             end
+
+            return toggleObj
         end
 
-        -- ОПТИМИЗИРОВАННЫЙ СЛАЙДЕР С РУЧНЫМ ВВОДОМ
         function TabObj:CreateSlider(options)
             options = options or {}
             local Name = options.Name or "Slider"
@@ -650,15 +805,12 @@ function PoriedUI:CreateWindow(config)
             Frame.Size = UDim2.new(1, 0, 0, 50)
             Frame.BackgroundColor3 = Theme.ElementBackground
             Frame.BackgroundTransparency = Theme.ElementTransparency
+            Frame.Parent = TabScroll
 
-            local FCorner = Instance.new("UICorner")
-            FCorner.CornerRadius = Theme.CornerRadius
-            FCorner.Parent = Frame
-
-            local Stroke = Instance.new("UIStroke")
+            Instance.new("UICorner", Frame).CornerRadius = Theme.CornerRadius
+            local Stroke = Instance.new("UIStroke", Frame)
             Stroke.Color = Theme.GlassStroke
             Stroke.Transparency = Theme.GlassStrokeTransparency
-            Stroke.Parent = Frame
 
             local Label = Instance.new("TextLabel")
             Label.Size = UDim2.new(0.6, 0, 0, 22)
@@ -666,7 +818,7 @@ function PoriedUI:CreateWindow(config)
             Label.Text = Name
             Label.TextColor3 = Theme.TextWhite
             Label.TextSize = 13
-            Label.Font = CurrentFontMedium
+            RegisterFont(Label, false)
             Label.TextXAlignment = Enum.TextXAlignment.Left
             Label.BackgroundTransparency = 1
             Label.Parent = Frame
@@ -677,7 +829,7 @@ function PoriedUI:CreateWindow(config)
             ValueText.Text = tostring(value)
             ValueText.TextColor3 = Theme.Accent
             ValueText.TextSize = 13
-            ValueText.Font = CurrentFontBold
+            RegisterFont(ValueText, true)
             ValueText.TextXAlignment = Enum.TextXAlignment.Right
             ValueText.BackgroundTransparency = 1
             ValueText.Parent = Frame
@@ -687,52 +839,45 @@ function PoriedUI:CreateWindow(config)
             SliderTrack.Position = UDim2.new(0, 12, 1, -16)
             SliderTrack.BackgroundColor3 = Color3.fromRGB(50, 55, 65)
             SliderTrack.Active = true
+            SliderTrack.Parent = Frame
 
-            local TrackCorner = Instance.new("UICorner")
-            TrackCorner.CornerRadius = UDim.new(1, 0)
-            TrackCorner.Parent = SliderTrack
+            Instance.new("UICorner", SliderTrack).CornerRadius = UDim.new(1, 0)
 
             local SliderFill = Instance.new("Frame")
-            SliderFill.Size = UDim2.new(math.clamp((value - Min) / (Max - Min), 0, 1), 0, 1, 0)
+            SliderFill.Size = UDim2.new((value - Min) / math.max(1, (Max - Min)), 0, 1, 0)
             SliderFill.BackgroundColor3 = Theme.Accent
-
-            local FillCorner = Instance.new("UICorner")
-            FillCorner.CornerRadius = UDim.new(1, 0)
-            FillCorner.Parent = SliderFill
             SliderFill.Parent = SliderTrack
-            SliderTrack.Parent = Frame
-            Frame.Parent = TabScroll
+
+            Instance.new("UICorner", SliderFill).CornerRadius = UDim.new(1, 0)
 
             local dragging = false
-            local lastVal = value
+            local dragInput = nil
             local function UpdateSlider(input)
-                local pos = math.clamp((input.Position.X - SliderTrack.AbsolutePosition.X) / SliderTrack.AbsoluteSize.X, 0, 1)
-                local newVal = math.floor(Min + (Max - Min) * pos)
-                SliderFill.Size = UDim2.new(pos, 0, 1, 0)
-                if newVal ~= lastVal then
-                    lastVal = newVal
-                    value = newVal
-                    ValueText.Text = tostring(value)
-                    Callback(value)
-                end
+                local pos = math.clamp((input.Position.X - SliderTrack.AbsolutePosition.X) / math.max(1, SliderTrack.AbsoluteSize.X), 0, 1)
+                value = math.floor(Min + (Max - Min) * pos)
+                ValueText.Text = tostring(value)
+                Tween(SliderFill, 0.05, {Size = UDim2.new(pos, 0, 1, 0)})
+                Callback(value)
             end
 
             SliderTrack.InputBegan:Connect(function(input)
                 if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                     dragging = true
+                    dragInput = input
                     UpdateSlider(input)
                 end
             end)
 
             UserInputService.InputChanged:Connect(function(input)
-                if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                if dragging and input == dragInput then
                     UpdateSlider(input)
                 end
             end)
 
             UserInputService.InputEnded:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                if dragging and input == dragInput then
                     dragging = false
+                    dragInput = nil
                 end
             end)
 
@@ -740,9 +885,8 @@ function PoriedUI:CreateWindow(config)
                 local num = tonumber(ValueText.Text)
                 if num then
                     value = math.clamp(math.floor(num), Min, Max)
-                    lastVal = value
                     ValueText.Text = tostring(value)
-                    local pos = (value - Min) / (Max - Min)
+                    local pos = (value - Min) / math.max(1, (Max - Min))
                     Tween(SliderFill, 0.2, {Size = UDim2.new(pos, 0, 1, 0)})
                     Callback(value)
                 else
@@ -755,17 +899,17 @@ function PoriedUI:CreateWindow(config)
                 GetValue = function() return value end,
                 SetValue = function(newVal)
                     value = math.clamp(newVal, Min, Max)
-                    lastVal = value
                     ValueText.Text = tostring(value)
-                    Tween(SliderFill, 0.2, {Size = UDim2.new((value - Min) / (Max - Min), 0, 1, 0)})
+                    Tween(SliderFill, 0.2, {Size = UDim2.new((value - Min) / math.max(1, (Max - Min)), 0, 1, 0)})
                     Callback(value)
                 end,
-                UpdateColor = function(col) 
+                UpdateColor = function(col)
                     SliderFill.BackgroundColor3 = col
-                    ValueText.TextColor3 = col 
+                    ValueText.TextColor3 = col
                 end
             }
             table.insert(WindowObj.RegisteredSliders, sliderObj)
+            return sliderObj
         end
 
         function TabObj:CreateInput(options)
@@ -778,15 +922,12 @@ function PoriedUI:CreateWindow(config)
             Frame.Size = UDim2.new(1, 0, 0, 42)
             Frame.BackgroundColor3 = Theme.ElementBackground
             Frame.BackgroundTransparency = Theme.ElementTransparency
+            Frame.Parent = TabScroll
 
-            local FCorner = Instance.new("UICorner")
-            FCorner.CornerRadius = Theme.CornerRadius
-            FCorner.Parent = Frame
-
-            local Stroke = Instance.new("UIStroke")
+            Instance.new("UICorner", Frame).CornerRadius = Theme.CornerRadius
+            local Stroke = Instance.new("UIStroke", Frame)
             Stroke.Color = Theme.GlassStroke
             Stroke.Transparency = Theme.GlassStrokeTransparency
-            Stroke.Parent = Frame
 
             local Label = Instance.new("TextLabel")
             Label.Size = UDim2.new(0.45, 0, 1, 0)
@@ -794,7 +935,7 @@ function PoriedUI:CreateWindow(config)
             Label.Text = Name
             Label.TextColor3 = Theme.TextWhite
             Label.TextSize = 13
-            Label.Font = CurrentFontMedium
+            RegisterFont(Label, false)
             Label.TextXAlignment = Enum.TextXAlignment.Left
             Label.BackgroundTransparency = 1
             Label.Parent = Frame
@@ -805,24 +946,22 @@ function PoriedUI:CreateWindow(config)
             InputBox.BackgroundColor3 = Color3.fromRGB(40, 45, 55)
             InputBox.PlaceholderText = Placeholder
             InputBox.Text = ""
-            InputBox.TextColor3 = Theme.Accent
+            RegisterAccentText(InputBox)
             InputBox.PlaceholderColor3 = Theme.TextDark
             InputBox.TextSize = 12
-            InputBox.Font = CurrentFontBold
-
-            local BoxCorner = Instance.new("UICorner")
-            BoxCorner.CornerRadius = UDim.new(0, 6)
-            BoxCorner.Parent = InputBox
+            RegisterFont(InputBox, true)
             InputBox.Parent = Frame
-            Frame.Parent = TabScroll
+
+            Instance.new("UICorner", InputBox).CornerRadius = UDim.new(0, 6)
 
             InputBox.FocusLost:Connect(function()
                 Callback(InputBox.Text)
             end)
 
-            return InputBox
+            return InputBox, Label
         end
 
+        -- Компактный Dropdown с внутренней прокруткой (не растягивается на 1500px)
         function TabObj:CreateDropdown(options)
             options = options or {}
             local Name = options.Name or "Dropdown"
@@ -835,15 +974,12 @@ function PoriedUI:CreateWindow(config)
             Frame.BackgroundColor3 = Theme.ElementBackground
             Frame.BackgroundTransparency = Theme.ElementTransparency
             Frame.ClipsDescendants = true
+            Frame.Parent = TabScroll
 
-            local FCorner = Instance.new("UICorner")
-            FCorner.CornerRadius = Theme.CornerRadius
-            FCorner.Parent = Frame
-
-            local Stroke = Instance.new("UIStroke")
+            Instance.new("UICorner", Frame).CornerRadius = Theme.CornerRadius
+            local Stroke = Instance.new("UIStroke", Frame)
             Stroke.Color = Theme.GlassStroke
             Stroke.Transparency = Theme.GlassStrokeTransparency
-            Stroke.Parent = Frame
 
             local HeaderBtn = Instance.new("TextButton")
             HeaderBtn.Size = UDim2.new(1, 0, 0, 42)
@@ -857,7 +993,7 @@ function PoriedUI:CreateWindow(config)
             Label.Text = Name
             Label.TextColor3 = Theme.TextWhite
             Label.TextSize = 13
-            Label.Font = CurrentFontMedium
+            RegisterFont(Label, false)
             Label.TextXAlignment = Enum.TextXAlignment.Left
             Label.BackgroundTransparency = 1
             Label.Parent = HeaderBtn
@@ -866,9 +1002,9 @@ function PoriedUI:CreateWindow(config)
             SelectedLabel.Size = UDim2.new(0.4, 0, 0, 42)
             SelectedLabel.Position = UDim2.new(0.6, -20, 0, 0)
             SelectedLabel.Text = List[1] or "None"
-            SelectedLabel.TextColor3 = Theme.Accent
+            RegisterAccentText(SelectedLabel)
             SelectedLabel.TextSize = 12
-            SelectedLabel.Font = CurrentFontBold
+            RegisterFont(SelectedLabel, true)
             SelectedLabel.TextXAlignment = Enum.TextXAlignment.Right
             SelectedLabel.BackgroundTransparency = 1
             SelectedLabel.Parent = HeaderBtn
@@ -882,35 +1018,54 @@ function PoriedUI:CreateWindow(config)
             Arrow.BackgroundTransparency = 1
             Arrow.Parent = HeaderBtn
 
-            local OptionContainer = Instance.new("Frame")
-            OptionContainer.Size = UDim2.new(1, -20, 0, 0)
+            local OptionContainer = Instance.new("ScrollingFrame")
+            OptionContainer.Size = UDim2.new(1, -20, 0, 150)
             OptionContainer.Position = UDim2.new(0, 10, 0, 42)
             OptionContainer.BackgroundTransparency = 1
+            OptionContainer.ScrollBarThickness = 2
+            OptionContainer.ScrollBarImageColor3 = Theme.Accent
+            OptionContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
             OptionContainer.Parent = Frame
 
             local OptionLayout = Instance.new("UIListLayout")
             OptionLayout.Padding = UDim.new(0, 4)
             OptionLayout.Parent = OptionContainer
 
+            OptionLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                OptionContainer.CanvasSize = UDim2.new(0, 0, 0, OptionLayout.AbsoluteContentSize.Y + 6)
+            end)
+
+            local itemCount = 0
+            local function GetExpandedHeight()
+                local listH = math.min(itemCount * 32, 160)
+                return 46 + listH
+            end
+
             local function RefreshList(newList)
+                List = newList or {}
                 for _, child in pairs(OptionContainer:GetChildren()) do
                     if child:IsA("TextButton") then child:Destroy() end
                 end
 
-                for _, item in ipairs(newList or List) do
+                itemCount = #List
+                if itemCount > 0 and (SelectedLabel.Text == "None" or SelectedLabel.Text == "") then
+                    SelectedLabel.Text = List[1]
+                elseif itemCount == 0 then
+                    SelectedLabel.Text = "None"
+                end
+
+                for _, item in ipairs(List) do
                     local ItemBtn = Instance.new("TextButton")
-                    ItemBtn.Size = UDim2.new(1, 0, 0, 28)
+                    ItemBtn.Size = UDim2.new(1, -4, 0, 28)
                     ItemBtn.BackgroundColor3 = Color3.fromRGB(40, 45, 55)
                     ItemBtn.BackgroundTransparency = 0.3
                     ItemBtn.Text = item
                     ItemBtn.TextColor3 = Theme.TextWhite
                     ItemBtn.TextSize = 12
-                    ItemBtn.Font = CurrentFontMedium
-
-                    local ItemCorner = Instance.new("UICorner")
-                    ItemCorner.CornerRadius = UDim.new(0, 6)
-                    ItemCorner.Parent = ItemBtn
+                    RegisterFont(ItemBtn, false)
                     ItemBtn.Parent = OptionContainer
+
+                    Instance.new("UICorner", ItemBtn).CornerRadius = UDim.new(0, 6)
 
                     ItemBtn.Activated:Connect(function()
                         SelectedLabel.Text = item
@@ -920,35 +1075,40 @@ function PoriedUI:CreateWindow(config)
                         Callback({item})
                     end)
                 end
+
+                OptionContainer.Size = UDim2.new(1, -20, 0, math.min(itemCount * 32, 160))
+                if expanded then
+                    Tween(Frame, 0.2, {Size = UDim2.new(1, 0, 0, GetExpandedHeight())})
+                end
             end
 
             RefreshList(List)
 
             HeaderBtn.Activated:Connect(function()
+                if itemCount == 0 then return end
                 expanded = not expanded
-                local targetHeight = expanded and (42 + #OptionContainer:GetChildren() * 32) or 42
+                local targetHeight = expanded and GetExpandedHeight() or 42
                 Tween(Frame, 0.2, {Size = UDim2.new(1, 0, 0, targetHeight)})
                 Tween(Arrow, 0.2, {Rotation = expanded and 180 or 0})
             end)
 
-            Frame.Parent = TabScroll
-
             local dropdownObj = {
                 Name = Name,
+                LabelInstance = Label,
                 GetValue = function() return SelectedLabel.Text end,
-                SetValue = function(val)
+                SetValue = function(val, silent)
                     SelectedLabel.Text = val
-                    Callback({val})
+                    if not silent then
+                        Callback({val})
+                    end
+                end,
+                Refresh = function(_, newList)
+                    RefreshList(newList)
                 end
             }
             table.insert(WindowObj.RegisteredDropdowns, dropdownObj)
 
-            return {
-                Refresh = function(_, newList)
-                    List = newList
-                    RefreshList(newList)
-                end
-            }
+            return dropdownObj
         end
 
         function TabObj:CreateButton(options)
@@ -963,18 +1123,14 @@ function PoriedUI:CreateWindow(config)
             BtnFrame.Text = Name
             BtnFrame.TextColor3 = Theme.TextWhite
             BtnFrame.TextSize = 13
-            BtnFrame.Font = CurrentFontMedium
+            RegisterFont(BtnFrame, false)
             BtnFrame.AutoButtonColor = false
+            BtnFrame.Parent = TabScroll
 
-            local BCorner = Instance.new("UICorner")
-            BCorner.CornerRadius = Theme.CornerRadius
-            BCorner.Parent = BtnFrame
-
-            local Stroke = Instance.new("UIStroke")
+            Instance.new("UICorner", BtnFrame).CornerRadius = Theme.CornerRadius
+            local Stroke = Instance.new("UIStroke", BtnFrame)
             Stroke.Color = Theme.GlassStroke
             Stroke.Transparency = Theme.GlassStrokeTransparency
-            Stroke.Parent = BtnFrame
-            BtnFrame.Parent = TabScroll
 
             BtnFrame.Activated:Connect(function()
                 Tween(BtnFrame, 0.08, {Size = UDim2.new(0.97, 0, 0, 38), BackgroundColor3 = Theme.Accent, TextColor3 = Color3.fromRGB(0, 0, 0)})
@@ -996,7 +1152,8 @@ function PoriedUI:CreateWindow(config)
         WindowObj.CustomTabCreated = true
 
         local CustomTab = WindowObj:CreateTab("Custom", 997)
-        CustomTab:CreateSection(Translations[CurrentLang].OverlayWidget)
+        local SecOverlay = CustomTab:CreateSection(Translations[CurrentLang].OverlayWidget)
+        RegisterTranslatable(SecOverlay, "OverlayWidget", "", true)
 
         local expanded = false
 
@@ -1005,15 +1162,12 @@ function PoriedUI:CreateWindow(config)
         Frame.BackgroundColor3 = Theme.ElementBackground
         Frame.BackgroundTransparency = Theme.ElementTransparency
         Frame.ClipsDescendants = true
+        Frame.Parent = CustomTab.Scroll
 
-        local FCorner = Instance.new("UICorner")
-        FCorner.CornerRadius = Theme.CornerRadius
-        FCorner.Parent = Frame
-
-        local Stroke = Instance.new("UIStroke")
+        Instance.new("UICorner", Frame).CornerRadius = Theme.CornerRadius
+        local Stroke = Instance.new("UIStroke", Frame)
         Stroke.Color = Theme.GlassStroke
         Stroke.Transparency = Theme.GlassStrokeTransparency
-        Stroke.Parent = Frame
 
         local HeaderBar = Instance.new("Frame")
         HeaderBar.Size = UDim2.new(1, 0, 0, 42)
@@ -1023,10 +1177,10 @@ function PoriedUI:CreateWindow(config)
         local Label = Instance.new("TextLabel")
         Label.Size = UDim2.new(1, -120, 1, 0)
         Label.Position = UDim2.new(0, 12, 0, 0)
-        Label.Text = Translations[CurrentLang].OverlayWidget
+        RegisterTranslatable(Label, "OverlayWidget", "", false)
         Label.TextColor3 = Theme.TextWhite
         Label.TextSize = 13
-        Label.Font = CurrentFontMedium
+        RegisterFont(Label, false)
         Label.TextXAlignment = Enum.TextXAlignment.Left
         Label.BackgroundTransparency = 1
         Label.Parent = HeaderBar
@@ -1036,15 +1190,13 @@ function PoriedUI:CreateWindow(config)
         ExpandBtn.Position = UDim2.new(1, -82, 0.5, -11)
         ExpandBtn.BackgroundColor3 = Color3.fromRGB(40, 45, 55)
         ExpandBtn.Text = "⚙"
-        ExpandBtn.TextColor3 = Theme.Accent
+        RegisterAccentText(ExpandBtn)
         ExpandBtn.TextSize = 12
-        ExpandBtn.Font = CurrentFontBold
+        RegisterFont(ExpandBtn, true)
         ExpandBtn.Visible = OverlaySettings.Enabled
-
-        local ECorner = Instance.new("UICorner")
-        ECorner.CornerRadius = UDim.new(0, 6)
-        ECorner.Parent = ExpandBtn
         ExpandBtn.Parent = HeaderBar
+
+        Instance.new("UICorner", ExpandBtn).CornerRadius = UDim.new(0, 6)
 
         local SwitchBg = Instance.new("TextButton")
         SwitchBg.Size = UDim2.new(0, 42, 0, 22)
@@ -1052,21 +1204,17 @@ function PoriedUI:CreateWindow(config)
         SwitchBg.BackgroundColor3 = OverlaySettings.Enabled and Theme.Accent or Color3.fromRGB(50, 55, 65)
         SwitchBg.Text = ""
         SwitchBg.AutoButtonColor = false
+        SwitchBg.Parent = HeaderBar
 
-        local SCorner = Instance.new("UICorner")
-        SCorner.CornerRadius = UDim.new(1, 0)
-        SCorner.Parent = SwitchBg
+        Instance.new("UICorner", SwitchBg).CornerRadius = UDim.new(1, 0)
 
         local Knob = Instance.new("Frame")
         Knob.Size = UDim2.new(0, 18, 0, 18)
         Knob.Position = OverlaySettings.Enabled and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
         Knob.BackgroundColor3 = Theme.TextWhite
-
-        local KCorner = Instance.new("UICorner")
-        KCorner.CornerRadius = UDim.new(1, 0)
-        KCorner.Parent = Knob
         Knob.Parent = SwitchBg
-        SwitchBg.Parent = HeaderBar
+
+        Instance.new("UICorner", Knob).CornerRadius = UDim.new(1, 0)
 
         local ListContainer = Instance.new("Frame")
         ListContainer.Size = UDim2.new(1, -20, 0, 0)
@@ -1086,7 +1234,7 @@ function PoriedUI:CreateWindow(config)
 
         local function UpdateFrameHeight()
             if expanded then
-                local listHeight = #items * 32
+                local listHeight = #items * 34
                 Tween(Frame, 0.2, {Size = UDim2.new(1, 0, 0, 48 + listHeight)})
             else
                 Tween(Frame, 0.2, {Size = UDim2.new(1, 0, 0, 42)})
@@ -1100,21 +1248,20 @@ function PoriedUI:CreateWindow(config)
             ItemBtn.Size = UDim2.new(1, 0, 0, 28)
             ItemBtn.BackgroundColor3 = isActive and Theme.Accent or Color3.fromRGB(40, 45, 55)
             ItemBtn.BackgroundTransparency = isActive and 0 or 0.3
-            ItemBtn.Text = "  " .. Translations[CurrentLang][item.LabelKey]
+            RegisterTranslatable(ItemBtn, item.LabelKey, "  ", false)
             ItemBtn.TextColor3 = isActive and Color3.fromRGB(0, 0, 0) or Theme.TextWhite
             ItemBtn.TextSize = 12
-            ItemBtn.Font = CurrentFontMedium
+            RegisterFont(ItemBtn, false)
             ItemBtn.TextXAlignment = Enum.TextXAlignment.Left
-
-            local ICorner = Instance.new("UICorner")
-            ICorner.CornerRadius = UDim.new(0, 6)
-            ICorner.Parent = ItemBtn
             ItemBtn.Parent = ListContainer
+
+            Instance.new("UICorner", ItemBtn).CornerRadius = UDim.new(0, 6)
 
             ItemBtn.Activated:Connect(function()
                 OverlaySettings[item.Key] = not OverlaySettings[item.Key]
                 local activeNow = OverlaySettings[item.Key]
-                
+                SaveUIState()
+
                 if activeNow then
                     Tween(ItemBtn, 0.15, {BackgroundColor3 = Theme.Accent, BackgroundTransparency = 0, TextColor3 = Color3.fromRGB(0, 0, 0)})
                 else
@@ -1126,7 +1273,8 @@ function PoriedUI:CreateWindow(config)
         local function ToggleOverlay()
             OverlaySettings.Enabled = not OverlaySettings.Enabled
             local state = OverlaySettings.Enabled
-            
+            SaveUIState()
+
             ExpandBtn.Visible = state
             if state then
                 Tween(SwitchBg, 0.2, {BackgroundColor3 = Theme.Accent})
@@ -1148,10 +1296,9 @@ function PoriedUI:CreateWindow(config)
             UpdateFrameHeight()
         end)
 
-        Frame.Parent = CustomTab.Scroll
-
         -- СЕКЦИЯ СМЕНЫ ТЕМ (THEME SELECTOR)
-        CustomTab:CreateSection(Translations[CurrentLang].ThemeSelector)
+        local SecTheme = CustomTab:CreateSection(Translations[CurrentLang].ThemeSelector)
+        RegisterTranslatable(SecTheme, "ThemeSelector", "", true)
 
         local ThemesList = {
             { Name = "Emerald Green", Color = Color3.fromRGB(0, 230, 118) },
@@ -1163,22 +1310,19 @@ function PoriedUI:CreateWindow(config)
         }
 
         local activeThemeName = "Emerald Green"
-        pcall(function()
-            if isfile("poried_configs/poried_theme.json") then
-                local data = HttpService:JSONDecode(readfile("poried_configs/poried_theme.json"))
-                if data then
-                    if data.IsRainbow then
-                        activeThemeName = "RGB Rainbow"
-                    elseif data.ThemeName then
-                        activeThemeName = data.ThemeName
-                    end
-                end
+        local savedTheme = LoadJSON("poried_theme.json")
+        if savedTheme then
+            if savedTheme.IsRainbow then
+                activeThemeName = "RGB Rainbow"
+            elseif savedTheme.ThemeName then
+                activeThemeName = savedTheme.ThemeName
             end
-        end)
+        end
 
         local ThemeButtonsContainer = Instance.new("Frame")
         ThemeButtonsContainer.Size = UDim2.new(1, 0, 0, #ThemesList * 34)
         ThemeButtonsContainer.BackgroundTransparency = 1
+        ThemeButtonsContainer.Parent = CustomTab.Scroll
 
         local ThemeLayout = Instance.new("UIListLayout")
         ThemeLayout.Padding = UDim.new(0, 6)
@@ -1189,12 +1333,20 @@ function PoriedUI:CreateWindow(config)
         local function RefreshThemeUI()
             for name, btn in pairs(ThemeBtns) do
                 if name == activeThemeName then
-                    Tween(btn, 0.2, {BackgroundColor3 = Theme.Accent, BackgroundTransparency = 0, TextColor3 = Color3.fromRGB(0, 0, 0)})
+                    btn.BackgroundColor3 = Theme.Accent
+                    btn.BackgroundTransparency = 0
+                    btn.TextColor3 = Color3.fromRGB(0, 0, 0)
                 else
-                    Tween(btn, 0.2, {BackgroundColor3 = Color3.fromRGB(40, 45, 55), BackgroundTransparency = 0.3, TextColor3 = Theme.TextWhite})
+                    btn.BackgroundColor3 = Color3.fromRGB(40, 45, 55)
+                    btn.BackgroundTransparency = 0.3
+                    btn.TextColor3 = Theme.TextWhite
                 end
             end
+            if OverlaySettings.Enabled then
+                SwitchBg.BackgroundColor3 = Theme.Accent
+            end
         end
+        WindowObj.RefreshThemeButtons = RefreshThemeUI
 
         for _, th in ipairs(ThemesList) do
             local TBtn = Instance.new("TextButton")
@@ -1204,80 +1356,60 @@ function PoriedUI:CreateWindow(config)
             TBtn.Text = "  " .. th.Name
             TBtn.TextColor3 = (th.Name == activeThemeName) and Color3.fromRGB(0, 0, 0) or Theme.TextWhite
             TBtn.TextSize = 12
-            TBtn.Font = CurrentFontBold
+            RegisterFont(TBtn, true)
             TBtn.TextXAlignment = Enum.TextXAlignment.Left
-
-            local TBCorner = Instance.new("UICorner")
-            TBCorner.CornerRadius = UDim.new(0, 6)
-            TBCorner.Parent = TBtn
             TBtn.Parent = ThemeButtonsContainer
 
+            Instance.new("UICorner", TBtn).CornerRadius = UDim.new(0, 6)
             ThemeBtns[th.Name] = TBtn
 
             TBtn.Activated:Connect(function()
                 activeThemeName = th.Name
-                SetThemeColor(th.Color or Theme.Accent, th.IsRainbow or false)
-                pcall(function()
-                    if not isfolder("poried_configs") then makefolder("poried_configs") end
-                    local themeData = { 
-                        ThemeName = th.Name, 
-                        IsRainbow = th.IsRainbow or false, 
-                        R = (th.Color and th.Color.R) or 0, 
-                        G = (th.Color and th.Color.G) or 0, 
-                        B = (th.Color and th.Color.B) or 0 
-                    }
-                    writefile("poried_configs/poried_theme.json", HttpService:JSONEncode(themeData))
-                end)
+                SetThemeColor(th.Color or Theme.Accent, th.IsRainbow or false, th.Name)
                 RefreshThemeUI()
+                ShowToast("Theme: " .. th.Name)
             end)
         end
-        ThemeButtonsContainer.Parent = CustomTab.Scroll
 
-        -- ВЫБОР ЯЗЫКА (LANGUAGE SELECTOR)
-        CustomTab:CreateSection(Translations[CurrentLang].LanguageSelector)
-        CustomTab:CreateDropdown({
+        -- ВЫБОР ЯЗЫКА (LANGUAGE SELECTOR С МГНОВЕННЫМ ОБНОВЛЕНИЕМ)
+        local SecLang = CustomTab:CreateSection(Translations[CurrentLang].LanguageSelector)
+        RegisterTranslatable(SecLang, "LanguageSelector", "", true)
+
+        local langDropdown = CustomTab:CreateDropdown({
             Name = "Language",
             Options = {"English", "Русский"},
             Callback = function(sel)
                 local langKey = sel[1] == "Русский" and "RU" or "EN"
                 CurrentLang = langKey
-                pcall(function()
-                    if not isfolder("poried_configs") then makefolder("poried_configs") end
-                    writefile("poried_configs/poried_lang.json", HttpService:JSONEncode({ Lang = langKey }))
-                end)
+                SaveJSON("poried_lang.json", { Lang = langKey })
+                for _, updateFn in ipairs(TranslatableRegistry) do
+                    pcall(updateFn)
+                end
+                ShowToast(langKey == "RU" and "Язык: Русский" or "Language: English")
             end
         })
+        langDropdown.SetValue(CurrentLang == "RU" and "Русский" or "English", true)
 
-        -- ВЫБОР ШРИФТА (FONT SELECTOR)
-        CustomTab:CreateSection(Translations[CurrentLang].FontSelector)
-        CustomTab:CreateDropdown({
+        -- ВЫБОР ШРИФТА (FONT SELECTOR С МГНОВЕННЫМ ОБНОВЛЕНИЕМ)
+        local SecFont = CustomTab:CreateSection(Translations[CurrentLang].FontSelector)
+        RegisterTranslatable(SecFont, "FontSelector", "", true)
+
+        local fontDropdown = CustomTab:CreateDropdown({
             Name = "Font Style",
             Options = {"Gotham", "SourceSans", "RobotoMono", "Ubuntu", "FredokaOne"},
             Callback = function(sel)
                 local fontName = sel[1]
-                if fontName == "SourceSans" then
-                    CurrentFontMedium = Enum.Font.SourceSans
-                    CurrentFontBold = Enum.Font.SourceSansBold
-                elseif fontName == "RobotoMono" then
-                    CurrentFontMedium = Enum.Font.RobotoMono
-                    CurrentFontBold = Enum.Font.RobotoMono
-                elseif fontName == "Ubuntu" then
-                    CurrentFontMedium = Enum.Font.Ubuntu
-                    CurrentFontBold = Enum.Font.Ubuntu
-                elseif fontName == "FredokaOne" then
-                    CurrentFontMedium = Enum.Font.FredokaOne
-                    CurrentFontBold = Enum.Font.FredokaOne
-                else
-                    CurrentFontMedium = Enum.Font.GothamMedium
-                    CurrentFontBold = Enum.Font.GothamBold
+                ApplyFontByName(fontName)
+                for _, item in ipairs(FontRegistry) do
+                    if item.Instance and item.Instance.Parent then
+                        item.Instance.Font = item.IsBold and CurrentFontBold or CurrentFontMedium
+                    end
                 end
-
-                pcall(function()
-                    if not isfolder("poried_configs") then makefolder("poried_configs") end
-                    writefile("poried_configs/poried_font.json", HttpService:JSONEncode({ FontName = fontName }))
-                end)
+                SaveJSON("poried_font.json", { FontName = CurrentFontName })
+                ShowToast("Font: " .. CurrentFontName)
             end
         })
+        fontDropdown.SetValue(CurrentFontName, true)
     end
 
     -- // ВСТРОЕННАЯ ВКЛАДКА "CONFIG" // --
@@ -1286,38 +1418,90 @@ function PoriedUI:CreateWindow(config)
         WindowObj.ConfigTabCreated = true
 
         local ConfigTab = WindowObj:CreateTab("Config", 998)
-        ConfigTab:CreateSection(Translations[CurrentLang].SaveCurrentConfig)
+        local SecSave = ConfigTab:CreateSection(Translations[CurrentLang].SaveCurrentConfig)
+        RegisterTranslatable(SecSave, "SaveCurrentConfig", "", true)
 
         local newConfigName = ""
         local selectedConfigName = ""
 
-        ConfigTab:CreateInput({
+        local cfgInput, cfgInputLabel = ConfigTab:CreateInput({
             Name = Translations[CurrentLang].ConfigName,
             PlaceholderText = "e.g. Legit, Rage",
             Callback = function(txt)
                 newConfigName = txt
             end
         })
+        RegisterTranslatable(cfgInputLabel, "ConfigName", "", false)
 
         local function GetSavedConfigNames()
             local list = {}
             pcall(function()
-                if not isfolder("poried_configs") then makefolder("poried_configs") end
-                for _, file in ipairs(listfiles("poried_configs")) do
-                    if file:sub(-5) == ".json" and not file:find("poried_theme") and not file:find("poried_binds") and not file:find("poried_lang") and not file:find("poried_font") then
-                        local name = file:match("([^/^\\]+)%.json$")
-                        if name then table.insert(list, name) end
+                EnsureConfigFolder()
+                if listfiles then
+                    for _, file in ipairs(listfiles("poried_configs")) do
+                        if file:sub(-5) == ".json"
+                            and not file:find("poried_theme")
+                            and not file:find("poried_binds")
+                            and not file:find("poried_lang")
+                            and not file:find("poried_font")
+                            and not file:find("poried_ui_state")
+                        then
+                            local name = file:match("([^/^\\]+)%.json$")
+                            if name then table.insert(list, name) end
+                        end
                     end
                 end
             end)
             return list
         end
 
-        ConfigTab:CreateButton({
+        local function LoadConfigByName(cfgName)
+            if not cfgName or cfgName == "" or cfgName == "None" then return false end
+            local data = LoadJSON(cfgName .. ".json")
+            if data then
+                if data.Toggles then
+                    for name, state in pairs(data.Toggles) do
+                        for _, t in ipairs(WindowObj.RegisteredToggles) do
+                            if t.Name == name then t.SetState(state) end
+                        end
+                    end
+                end
+                if data.Sliders then
+                    for name, val in pairs(data.Sliders) do
+                        for _, s in ipairs(WindowObj.RegisteredSliders) do
+                            if s.Name == name then s.SetValue(val) end
+                        end
+                    end
+                end
+                if data.Dropdowns then
+                    for name, val in pairs(data.Dropdowns) do
+                        for _, d in ipairs(WindowObj.RegisteredDropdowns) do
+                            if d.Name == name and d.Name ~= Translations.EN.SelectConfig and d.Name ~= Translations.RU.SelectConfig then
+                                d.SetValue(val)
+                            end
+                        end
+                    end
+                end
+                if data.Overlay then
+                    for k, v in pairs(data.Overlay) do
+                        WindowObj.OverlaySettings[k] = v
+                    end
+                    SaveUIState()
+                end
+                return true
+            end
+            return false
+        end
+
+        local saveBtn = ConfigTab:CreateButton({
             Name = Translations[CurrentLang].SaveConfigBtn,
             Callback = function()
-                if newConfigName == "" then return end
-                
+                local targetName = (newConfigName ~= "" and newConfigName) or selectedConfigName
+                if targetName == "" or targetName == "None" then
+                    ShowToast("Enter Config Name!")
+                    return
+                end
+
                 local data = {
                     Toggles = {},
                     Sliders = {},
@@ -1335,94 +1519,105 @@ function PoriedUI:CreateWindow(config)
                     data.Dropdowns[d.Name] = d.GetValue()
                 end
 
-                pcall(function()
-                    if not isfolder("poried_configs") then makefolder("poried_configs") end
-                    writefile("poried_configs/" .. newConfigName .. ".json", HttpService:JSONEncode(data))
-                end)
-
+                SaveJSON(targetName .. ".json", data)
+                local names = GetSavedConfigNames()
                 if WindowObj.ConfigDropdownObj then
-                    WindowObj.ConfigDropdownObj:Refresh(GetSavedConfigNames())
+                    WindowObj.ConfigDropdownObj:Refresh(names)
+                    WindowObj.ConfigDropdownObj.SetValue(targetName, true)
                 end
+                selectedConfigName = targetName
+                ShowToast("Saved: " .. targetName)
             end
         })
+        RegisterTranslatable(saveBtn, "SaveConfigBtn", "", false)
 
-        ConfigTab:CreateSection(Translations[CurrentLang].ManageConfigs)
+        local SecManage = ConfigTab:CreateSection(Translations[CurrentLang].ManageConfigs)
+        RegisterTranslatable(SecManage, "ManageConfigs", "", true)
+
+        local initialConfigs = GetSavedConfigNames()
+        selectedConfigName = initialConfigs[1] or ""
 
         WindowObj.ConfigDropdownObj = ConfigTab:CreateDropdown({
             Name = Translations[CurrentLang].SelectConfig,
-            Options = GetSavedConfigNames(),
+            Options = initialConfigs,
             Callback = function(selected)
                 selectedConfigName = selected[1]
             end
         })
+        RegisterTranslatable(WindowObj.ConfigDropdownObj.LabelInstance, "SelectConfig", "", false)
 
-        ConfigTab:CreateButton({
+        local loadBtn = ConfigTab:CreateButton({
             Name = Translations[CurrentLang].LoadConfigBtn,
             Callback = function()
-                if selectedConfigName == "" then return end
-                pcall(function()
-                    if isfile("poried_configs/" .. selectedConfigName .. ".json") then
-                        local content = readfile("poried_configs/" .. selectedConfigName .. ".json")
-                        local data = HttpService:JSONDecode(content)
-                        if data then
-                            if data.Toggles then
-                                for name, state in pairs(data.Toggles) do
-                                    for _, t in ipairs(WindowObj.RegisteredToggles) do
-                                        if t.Name == name then t.SetState(state) end
-                                    end
-                                end
-                            end
-                            if data.Sliders then
-                                for name, val in pairs(data.Sliders) do
-                                    for _, s in ipairs(WindowObj.RegisteredSliders) do
-                                        if s.Name == name then s.SetValue(val) end
-                                    end
-                                end
-                            end
-                            if data.Dropdowns then
-                                for name, val in pairs(data.Dropdowns) do
-                                    for _, d in ipairs(WindowObj.RegisteredDropdowns) do
-                                        if d.Name == name then d.SetValue(val) end
-                                    end
-                                end
-                            end
-                            if data.Overlay then
-                                for k, v in pairs(data.Overlay) do
-                                    WindowObj.OverlaySettings[k] = v
-                                end
-                            end
-                        end
-                    end
-                end)
-            end
-        })
-
-        ConfigTab:CreateButton({
-            Name = Translations[CurrentLang].DeleteConfigBtn,
-            Callback = function()
-                if selectedConfigName == "" then return end
-                pcall(function()
-                    if isfile("poried_configs/" .. selectedConfigName .. ".json") then
-                        delfile("poried_configs/" .. selectedConfigName .. ".json")
-                    end
-                end)
-                selectedConfigName = ""
-                if WindowObj.ConfigDropdownObj then
-                    WindowObj.ConfigDropdownObj:Refresh(GetSavedConfigNames())
+                if LoadConfigByName(selectedConfigName) then
+                    ShowToast("Loaded: " .. selectedConfigName)
+                else
+                    ShowToast("Select a Config first!")
                 end
             end
         })
+        RegisterTranslatable(loadBtn, "LoadConfigBtn", "", false)
+
+        local delBtn = ConfigTab:CreateButton({
+            Name = Translations[CurrentLang].DeleteConfigBtn,
+            Callback = function()
+                if selectedConfigName == "" or selectedConfigName == "None" then return end
+                local deleted = selectedConfigName
+                pcall(function()
+                    if isfile and isfile("poried_configs/" .. deleted .. ".json") then
+                        delfile("poried_configs/" .. deleted .. ".json")
+                    end
+                end)
+                if UIState.AutoLoadConfig == deleted then
+                    UIState.AutoLoadConfig = ""
+                    SaveUIState()
+                end
+                local names = GetSavedConfigNames()
+                selectedConfigName = names[1] or ""
+                if WindowObj.ConfigDropdownObj then
+                    WindowObj.ConfigDropdownObj:Refresh(names)
+                end
+                ShowToast("Deleted: " .. deleted)
+            end
+        })
+        RegisterTranslatable(delBtn, "DeleteConfigBtn", "", false)
+
+        local autoLoadToggle = ConfigTab:CreateToggle({
+            Name = Translations[CurrentLang].AutoLoadToggle,
+            Default = (UIState.AutoLoadConfig ~= "" and UIState.AutoLoadConfig ~= nil),
+            Callback = function(v)
+                if v and selectedConfigName ~= "" and selectedConfigName ~= "None" then
+                    UIState.AutoLoadConfig = selectedConfigName
+                    SaveUIState()
+                    ShowToast("Auto-Load: " .. selectedConfigName)
+                else
+                    UIState.AutoLoadConfig = ""
+                    SaveUIState()
+                end
+            end
+        })
+        RegisterTranslatable(autoLoadToggle.LabelInstance, "AutoLoadToggle", "", false)
+
+        -- Авто-загрузка выбранного конфига после инициализации всех вкладок чита
+        if UIState.AutoLoadConfig and UIState.AutoLoadConfig ~= "" then
+            task.delay(0.6, function()
+                if LoadConfigByName(UIState.AutoLoadConfig) then
+                    ShowToast("Auto-Loaded: " .. UIState.AutoLoadConfig)
+                end
+            end)
+        end
     end
 
-    -- // ВСТРОЕННАЯ ВКЛАДКА "BINDS" С АВТО-СОХРАНЕНИЕМ // --
+    -- // ВСТРОЕННАЯ ВКЛАДКА "BINDS" С ДВУСТОРОННЕЙ СИНХРОНИЗАЦИЕЙ И УДАЛЕНИЕМ // --
     function WindowObj:CreateBindsTab()
         if WindowObj.BindsTabCreated then return end
         WindowObj.BindsTabCreated = true
 
         local BindTab = WindowObj:CreateTab("Binds", 999)
-        BindTab:CreateSection(Translations[CurrentLang].QuickActionBinds)
+        local SecBinds = BindTab:CreateSection(Translations[CurrentLang].QuickActionBinds)
+        RegisterTranslatable(SecBinds, "QuickActionBinds", "", true)
 
-        local selectedToggleName = ""
+        local selectedToggleName = WindowObj.RegisteredToggleNames[1] or ""
         local bindLabelText = "AIM"
 
         local DropdownObj = BindTab:CreateDropdown({
@@ -1432,28 +1627,30 @@ function PoriedUI:CreateWindow(config)
                 selectedToggleName = selected[1]
             end
         })
+        RegisterTranslatable(DropdownObj.LabelInstance, "SelectFeature", "", false)
 
-        WindowObj.OnToggleAdded = function()
+        WindowObj.OnToggleAdded = function(newName)
+            if selectedToggleName == "" or selectedToggleName == "None" then
+                selectedToggleName = newName
+            end
             DropdownObj:Refresh(WindowObj.RegisteredToggleNames)
         end
 
-        BindTab:CreateInput({
+        local bindInput, bindInputLabel = BindTab:CreateInput({
             Name = Translations[CurrentLang].ButtonLabel,
-            PlaceholderText = "e.g. AIM, BHP, ESP",
+            PlaceholderText = "e.g. AIM, WC, ESP",
             Callback = function(txt)
                 if txt and #txt > 0 then
                     bindLabelText = txt:sub(1, 3):upper()
                 end
             end
         })
+        RegisterTranslatable(bindInputLabel, "ButtonLabel", "", false)
 
         local SavedBindsData = {}
 
         local function SaveBindsToFile()
-            pcall(function()
-                if not isfolder("poried_configs") then makefolder("poried_configs") end
-                writefile("poried_configs/poried_binds.json", HttpService:JSONEncode(SavedBindsData))
-            end)
+            SaveJSON("poried_binds.json", SavedBindsData)
         end
 
         local function SpawnBindButton(toggleName, labelText, posScaleX, posOffsetX, posScaleY, posOffsetY)
@@ -1473,15 +1670,13 @@ function PoriedUI:CreateWindow(config)
             BindBtnFrame.Position = UDim2.new(posScaleX or 0.1, posOffsetX or math.random(10, 80), posScaleY or 0.3, posOffsetY or math.random(10, 80))
             BindBtnFrame.BackgroundColor3 = targetToggle.GetState() and Theme.Accent or Theme.MainBackground
             BindBtnFrame.BackgroundTransparency = 0.2
+            BindBtnFrame.Parent = ScreenGui
 
-            local BindCorner = Instance.new("UICorner")
-            BindCorner.CornerRadius = UDim.new(1, 0)
-            BindCorner.Parent = BindBtnFrame
+            Instance.new("UICorner", BindBtnFrame).CornerRadius = UDim.new(1, 0)
 
-            local BindStroke = Instance.new("UIStroke")
+            local BindStroke = Instance.new("UIStroke", BindBtnFrame)
             BindStroke.Color = Theme.Accent
             BindStroke.Thickness = 1.5
-            BindStroke.Parent = BindBtnFrame
 
             local BindTextLabel = Instance.new("TextLabel")
             BindTextLabel.Size = UDim2.new(1, 0, 1, 0)
@@ -1489,31 +1684,39 @@ function PoriedUI:CreateWindow(config)
             BindTextLabel.Text = labelText:sub(1, 3)
             BindTextLabel.TextColor3 = targetToggle.GetState() and Color3.fromRGB(0, 0, 0) or Theme.Accent
             BindTextLabel.TextSize = 12
-            BindTextLabel.Font = CurrentFontBold
+            RegisterFont(BindTextLabel, true)
             BindTextLabel.Parent = BindBtnFrame
-            BindBtnFrame.Parent = ScreenGui
 
-            local bindObj = {
-                ToggleName = toggleName,
-                Label = labelText,
-                Frame = BindBtnFrame,
-                UpdateColor = function(col)
-                    BindStroke.Color = col
-                    if targetToggle.GetState() then BindBtnFrame.BackgroundColor3 = col end
-                end
-            }
-            table.insert(WindowObj.RegisteredBinds, bindObj)
-
-            MakeDraggableAndClickable(BindBtnFrame, BindTextLabel, function()
-                targetToggle.Toggle()
-                local newState = targetToggle.GetState()
-                if newState then
+            local function SyncVisual(state)
+                if state then
                     Tween(BindBtnFrame, 0.2, {BackgroundColor3 = Theme.Accent})
                     Tween(BindTextLabel, 0.2, {TextColor3 = Color3.fromRGB(0, 0, 0)})
                 else
                     Tween(BindBtnFrame, 0.2, {BackgroundColor3 = Theme.MainBackground})
                     Tween(BindTextLabel, 0.2, {TextColor3 = Theme.Accent})
                 end
+            end
+
+            local bindObj = {
+                ToggleName = toggleName,
+                Label = labelText,
+                Frame = BindBtnFrame,
+                SyncState = SyncVisual,
+                UpdateColor = function(col)
+                    BindStroke.Color = col
+                    if targetToggle.GetState() then
+                        BindBtnFrame.BackgroundColor3 = col
+                        BindTextLabel.TextColor3 = Color3.fromRGB(0, 0, 0)
+                    else
+                        BindTextLabel.TextColor3 = col
+                    end
+                end
+            }
+            table.insert(WindowObj.RegisteredBinds, bindObj)
+
+            MakeDraggableAndClickable(BindBtnFrame, BindTextLabel, function()
+                targetToggle.Toggle()
+                SyncVisual(targetToggle.GetState())
             end, function()
                 for _, b in ipairs(SavedBindsData) do
                     if b.ToggleName == toggleName and b.Label == labelText then
@@ -1528,25 +1731,25 @@ function PoriedUI:CreateWindow(config)
             end)
         end
 
-        pcall(function()
-            if isfile("poried_configs/poried_binds.json") then
-                local data = HttpService:JSONDecode(readfile("poried_configs/poried_binds.json"))
-                if data and type(data) == "table" then
-                    SavedBindsData = data
-                    task.delay(0.5, function()
-                        for _, b in ipairs(SavedBindsData) do
-                            SpawnBindButton(b.ToggleName, b.Label, b.ScaleX, b.OffsetX, b.ScaleY, b.OffsetY)
-                        end
-                    end)
+        -- Восстановление сохраненных биндов из файла (AIM, WC и др.)
+        local loadedBinds = LoadJSON("poried_binds.json")
+        if loadedBinds and type(loadedBinds) == "table" then
+            SavedBindsData = loadedBinds
+            task.delay(0.5, function()
+                for _, b in ipairs(SavedBindsData) do
+                    SpawnBindButton(b.ToggleName, b.Label, b.ScaleX, b.OffsetX, b.ScaleY, b.OffsetY)
                 end
-            end
-        end)
+            end)
+        end
 
-        BindTab:CreateButton({
+        local createBindBtn = BindTab:CreateButton({
             Name = Translations[CurrentLang].CreateBindBtn,
             Callback = function()
+                if selectedToggleName == "" or selectedToggleName == "None" then
+                    selectedToggleName = WindowObj.RegisteredToggleNames[1] or ""
+                end
                 if selectedToggleName == "" then return end
-                
+
                 local bindItem = {
                     ToggleName = selectedToggleName,
                     Label = bindLabelText,
@@ -1560,38 +1763,43 @@ function PoriedUI:CreateWindow(config)
                 SaveBindsToFile()
 
                 SpawnBindButton(bindItem.ToggleName, bindItem.Label, bindItem.ScaleX, bindItem.OffsetX, bindItem.ScaleY, bindItem.OffsetY)
+                ShowToast("Bind Created: " .. bindLabelText)
             end
         })
-    end
+        RegisterTranslatable(createBindBtn, "CreateBindBtn", "", false)
 
-    -- Загрузка языка и шрифта
-    pcall(function()
-        if isfile("poried_configs/poried_lang.json") then
-            local data = HttpService:JSONDecode(readfile("poried_configs/poried_lang.json"))
-            if data and data.Lang then CurrentLang = data.Lang end
-        end
-        if isfile("poried_configs/poried_font.json") then
-            local data = HttpService:JSONDecode(readfile("poried_configs/poried_font.json"))
-            if data and data.FontName then
-                local fontName = data.FontName
-                if fontName == "SourceSans" then
-                    CurrentFontMedium = Enum.Font.SourceSans
-                    CurrentFontBold = Enum.Font.SourceSansBold
-                elseif fontName == "RobotoMono" then
-                    CurrentFontMedium = Enum.Font.RobotoMono
-                    CurrentFontBold = Enum.Font.RobotoMono
-                elseif fontName == "Ubuntu" then
-                    CurrentFontMedium = Enum.Font.Ubuntu
-                    CurrentFontBold = Enum.Font.Ubuntu
-                elseif fontName == "FredokaOne" then
-                    CurrentFontMedium = Enum.Font.FredokaOne
-                    CurrentFontBold = Enum.Font.FredokaOne
+        local removeLastBtn = BindTab:CreateButton({
+            Name = Translations[CurrentLang].RemoveLastBindBtn,
+            Callback = function()
+                if #WindowObj.RegisteredBinds > 0 then
+                    local lastBind = table.remove(WindowObj.RegisteredBinds)
+                    if lastBind and lastBind.Frame then
+                        lastBind.Frame:Destroy()
+                    end
+                    table.remove(SavedBindsData)
+                    SaveBindsToFile()
+                    ShowToast("Removed Last Bind")
                 end
             end
-        end
-    end)
+        })
+        RegisterTranslatable(removeLastBtn, "RemoveLastBindBtn", "", false)
 
-    -- Автоматическая сборка вкладок
+        local clearBindsBtn = BindTab:CreateButton({
+            Name = Translations[CurrentLang].ClearBindsBtn,
+            Callback = function()
+                for _, b in ipairs(WindowObj.RegisteredBinds) do
+                    if b.Frame then b.Frame:Destroy() end
+                end
+                table.clear(WindowObj.RegisteredBinds)
+                table.clear(SavedBindsData)
+                SaveBindsToFile()
+                ShowToast("All Binds Cleared")
+            end
+        })
+        RegisterTranslatable(clearBindsBtn, "ClearBindsBtn", "", false)
+    end
+
+    -- Автоматические вызовы встроенных системных вкладок
     WindowObj:CreateCustomTab()
     WindowObj:CreateConfigTab()
     WindowObj:CreateBindsTab()
